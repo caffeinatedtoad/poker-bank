@@ -24,9 +24,9 @@ export function toInputValue(cents: number): string {
 	return (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2);
 }
 
-/** A balance in words, from the player's side: 1000 → "owes $10", -500 → "$5 in the green", 0 → "even". */
+/** A balance in words, from the player's side: 1000 → "$10 in the red", -500 → "$5 in the green", 0 → "even". */
 export function describeBalance(cents: number): string {
-	if (cents > 0) return `owes ${formatCents(cents)}`;
+	if (cents > 0) return `${formatCents(cents)} in the red`;
 	if (cents < 0) return `${formatCents(-cents)} in the green`;
 	return 'even';
 }

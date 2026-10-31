@@ -139,12 +139,13 @@
 	<span
 		class="font-display font-bold tabular-nums"
 		class:text-primary={cents < 0}
+		class:text-error={cents > 0}
 		class:block={align === 'end'}
 		class:text-right={align === 'end'}
 	>
 		{formatCents(Math.abs(cents))}
-		{#if cents < 0}<span class="font-sans text-sm font-normal" class:block={align === 'end'}
-				>in the green</span
+		{#if cents !== 0}<span class="font-sans text-sm font-normal" class:block={align === 'end'}
+				>{cents < 0 ? 'in the green' : 'in the red'}</span
 			>{/if}
 	</span>
 {/snippet}
@@ -489,7 +490,7 @@
 		>
 			<input type="hidden" name="playerId" value={p.id} />
 			<label class="grid gap-1">
-				<span>New amount owed ($). Use a minus sign for money in the green.</span>
+				<span>New amount ($). Positive is in the red; use a minus sign for in the green.</span>
 				<input
 					name="value"
 					bind:value={setValue}
@@ -519,11 +520,15 @@
 			<input type="hidden" name="playerId" value={p.id} />
 			<p class="text-lg">
 				{#if p.balanceCents > 0}
-					{p.name} still owes
-					<strong class="font-display text-xl tabular-nums">{formatCents(p.balanceCents)}</strong>.
+					{p.name} is still
+					<strong class="font-display text-xl tabular-nums"
+						>{describeBalance(p.balanceCents)}</strong
+					>, which they owe the bank.
 				{:else if p.balanceCents < 0}
-					The bank still owes {p.name}
-					<strong class="font-display text-xl tabular-nums">{formatCents(-p.balanceCents)}</strong>.
+					{p.name} is still
+					<strong class="font-display text-xl tabular-nums"
+						>{describeBalance(p.balanceCents)}</strong
+					>, which the bank owes them.
 				{/if}
 				Removing them deletes their history. This can't be undone.
 			</p>

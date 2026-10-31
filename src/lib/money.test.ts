@@ -45,7 +45,7 @@ describe('toInputValue', () => {
 
 describe('describeBalance', () => {
 	it.each([
-		[1000, 'owes $10'],
+		[1000, '$10 in the red'],
 		[-500, '$5 in the green'],
 		[0, 'even']
 	])('describes %d as %j', (cents, want) => {
