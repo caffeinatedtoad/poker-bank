@@ -101,3 +101,27 @@ The browser updates without a reload. That's Vite's hot module replacement.
   boundary. Anyone who can reach the pod directly could forge it, so the Service must stay internal.
 - `DEV_USER` only works under `npm run dev` (`dev` from `$app/env`). Try it as someone else:
   `curl -H 'remote-email: sam@example.com' localhost:5173`.
+
+## Steps 6 and 7: forms, actions and confirmations
+
+- **Actions are POST handlers.** `<form method="POST" action="?/buyin">` posts to the current URL and runs
+  `actions.buyin` in `+page.server.ts`. Each action is the same shape as a Go handler:
+  1. `bankGroup()` loads the group and throws 403 unless you're its bank (authorization first, always),
+  2. read and validate fields with `#lib/server/forms.ts` (`r.FormValue` plus parsing),
+  3. on bad input `return fail(400, { error })`, which shows up as `form.error` on the page,
+  4. call one service function. On success, SvelteKit re-runs `load()` so the page shows fresh data.
+- **Hiding buttons is not security.** Non-banks never see the chip, but the 403 in every action is what stops
+  a hand-crafted POST. One check is easy to miss: `requirePlayer` in `ledger.ts` rejects a player id from
+  another group, so sam (bank of group 2) can't post `playerId=1` to `/g/2?/buyin` and touch group 1.
+- **Progressive enhancement:** forms are plain HTML and work with JavaScript off (full page reload).
+  `use:enhance` upgrades them to `fetch` with no reload. Same server code either way.
+- **CSRF:** in production SvelteKit rejects form posts whose `Origin` doesn't match the site (403).
+  The dev server skips this check, so test it with `npm run build && npm start`. adapter-node assumes
+  `https` (true behind Pangolin), so `npm start` over plain `http://localhost` rejects forms. Use `npm run dev` locally.
+- **Components:** `ConfirmDialog.svelte` is a reusable piece of UI with typed `Props` (its parameters).
+  `children: Snippet` is the slot for whatever the caller puts between the tags, rendered with `{@render children()}`.
+  `bind:this={dialog}` gives you the real DOM element, like holding a pointer.
+- **`$state` vs `$derived`:** `amount` is `$state` because the bank edits it. `amountCents` is `$derived`
+  from it, so the chip label, the hidden input and the "make default" button all update as you type.
+- **Native `<dialog>`:** `showModal()` gives focus trapping, Esc-to-close and a backdrop for free. The page mounts
+  the dialog only while a confirmation is pending (`{#if pending}`) and clears `pending` in `onclose`.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCents, parseCents } from './money';
+import { formatCents, parseCents, toInputValue } from './money';
 
 // it.each is Vitest's table-driven test, like `for _, tc := range cases { t.Run(...) }`.
 describe('parseCents', () => {
@@ -34,5 +34,11 @@ describe('formatCents', () => {
 		[123456, '$1,234.56']
 	])('formats %d as %j', (cents, want) => {
 		expect(formatCents(cents)).toBe(want);
+	});
+});
+
+describe('toInputValue', () => {
+	it.each([2000, 1250, 5, 0, -725, 123456])('round-trips %d through parseCents', (cents) => {
+		expect(parseCents(toInputValue(cents))).toBe(cents);
 	});
 });

@@ -26,3 +26,14 @@ cp .env.example .env
 | `npm run format`    | Format all files with Prettier                                             | `gofmt -w .`               |
 | `npm run build`     | Production build into `build/`                                             | `go build`                 |
 | `npm start`         | Run the production build with `.env` loaded (`node --env-file=.env build`) | `./poker-tracker`          |
+
+`npm start` behaves like production. CSRF protection is on, and the server assumes `https` (true behind Pangolin),
+so forms posted over plain `http://localhost` are rejected. Use `npm run dev` for local work.
+
+## Trying it as different users
+
+Locally you're `DEV_USER` from `.env`. To act as someone else, send the auth header yourself:
+
+```sh
+curl -H 'remote-email: sam@example.com' http://localhost:5173/
+```

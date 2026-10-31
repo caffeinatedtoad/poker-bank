@@ -18,3 +18,8 @@ export function formatCents(cents: number): string {
 		minimumFractionDigits: cents % 100 === 0 ? 0 : 2
 	}).format(cents / 100);
 }
+
+/** Cents as an editable input value: 2000 → "20", 1250 → "12.50". The inverse of parseCents. */
+export function toInputValue(cents: number): string {
+	return (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2);
+}

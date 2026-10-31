@@ -107,7 +107,7 @@
 .chip::before {
 	content: '';
 	position: absolute;
-	inset: 20%;
+	inset: 11%;
 	border: 2px dashed rgb(255 255 255 / 0.7);
 	border-radius: 50%;
 }
