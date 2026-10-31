@@ -5,9 +5,16 @@ import { entries, players } from './db/schema';
 
 const balance = sql<number>`coalesce(sum(${entries.deltaCents}), 0)`;
 
-/** Players in a group with their current balance (what they owe the bank), sorted by name. */
+// True for each player's most recent entry. Only that one can be undone, so removing a buy-in
+// can never silently change the result of a later cash-out or set.
+const isLatestEntry = sql`${entries.id} = (select max(e2.id) from entries e2 where e2.player_id = ${entries.playerId})`;
+
+/**
+ * Players in a group with their current balance (what they owe the bank), sorted by name.
+ * `lastBuyIn` is set when the player's most recent change is a buy-in, so the bank can remove it.
+ */
 export function listPlayers(db: DB, groupId: number) {
-	return db
+	const rows = db
 		.select({ id: players.id, name: players.name, balanceCents: balance })
 		.from(players)
 		.leftJoin(entries, eq(entries.playerId, players.id))
@@ -15,6 +22,16 @@ export function listPlayers(db: DB, groupId: number) {
 		.groupBy(players.id)
 		.orderBy(players.name)
 		.all();
+	const lastBuyIns = db
+		.select({ playerId: entries.playerId, entryId: entries.id, cents: entries.deltaCents })
+		.from(entries)
+		.innerJoin(players, eq(players.id, entries.playerId))
+		.where(and(eq(players.groupId, groupId), eq(entries.kind, 'buyin'), isLatestEntry))
+		.all();
+	const byPlayer = new Map(
+		lastBuyIns.map((b) => [b.playerId, { entryId: b.entryId, cents: b.cents }])
+	);
+	return rows.map((p) => ({ ...p, lastBuyIn: byPlayer.get(p.id) ?? null }));
 }
 
 export function addPlayer(db: DB, groupId: number, name: string): number {
@@ -43,18 +60,25 @@ export function buyIn(
 }
 
 /**
- * Deletes a buy-in that was tapped by mistake. Deleting (rather than appending a reversal) is
- * deliberate: the undo is offered for a few seconds, so the buy-in should read as never having happened.
- * Only buy-ins belonging to this group can be undone.
+ * Deletes a buy-in that was tapped by mistake, so it reads as never having happened (rather than
+ * appending a reversal). Only a buy-in in this group that is still the player's latest change
+ * can be removed. Repeating it steps back through earlier buy-ins.
  */
 export function undoBuyIn(db: DB, groupId: number, entryId: number): void {
 	const found = db
 		.select({ id: entries.id })
 		.from(entries)
 		.innerJoin(players, eq(players.id, entries.playerId))
-		.where(and(eq(entries.id, entryId), eq(entries.kind, 'buyin'), eq(players.groupId, groupId)))
+		.where(
+			and(
+				eq(entries.id, entryId),
+				eq(entries.kind, 'buyin'),
+				eq(players.groupId, groupId),
+				isLatestEntry
+			)
+		)
 		.get();
-	if (!found) error(404, 'That buy-in is already gone');
+	if (!found) error(404, "That buy-in can't be removed: it's gone, or something changed since");
 	db.delete(entries).where(eq(entries.id, entryId)).run();
 }
 

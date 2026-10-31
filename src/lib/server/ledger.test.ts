@@ -67,6 +67,27 @@ describe('ledger', () => {
 		expect(thrownStatus(() => undoBuyIn(db, groupId, oops))).toBe(404); // already gone
 	});
 
+	it('removes buy-ins one at a time, most recent first', () => {
+		const lastBuyIn = () => listPlayers(db, groupId)[0].lastBuyIn;
+		const first = buyIn(db, groupId, alice, 2000, BANK);
+		const second = buyIn(db, groupId, alice, 500, BANK);
+		expect(lastBuyIn()).toEqual({ entryId: second, cents: 500 });
+		expect(thrownStatus(() => undoBuyIn(db, groupId, first))).toBe(404); // not the latest yet
+		undoBuyIn(db, groupId, second);
+		expect(lastBuyIn()).toEqual({ entryId: first, cents: 2000 });
+		undoBuyIn(db, groupId, first);
+		expect(lastBuyIn()).toBeNull();
+		expect(balanceOf(db, alice)).toBe(0);
+	});
+
+	it("won't remove a buy-in from before a cash-out", () => {
+		const buyin = buyIn(db, groupId, alice, 2000, BANK);
+		cashOut(db, groupId, alice, 3000, BANK);
+		expect(listPlayers(db, groupId)[0].lastBuyIn).toBeNull();
+		expect(thrownStatus(() => undoBuyIn(db, groupId, buyin))).toBe(404);
+		expect(balanceOf(db, alice)).toBe(-1000);
+	});
+
 	it('only undoes buy-ins, and only within the group', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		cashOut(db, groupId, alice, 500, BANK);
@@ -115,11 +136,11 @@ describe('ledger', () => {
 	it('lists players with balances, sorted by name', () => {
 		const bob = addPlayer(db, groupId, 'Bob');
 		addPlayer(db, groupId, 'Aaron');
-		buyIn(db, groupId, bob, 2000, BANK);
+		const entryId = buyIn(db, groupId, bob, 2000, BANK);
 		expect(listPlayers(db, groupId)).toEqual([
-			{ id: expect.any(Number), name: 'Aaron', balanceCents: 0 },
-			{ id: alice, name: 'Alice', balanceCents: 0 },
-			{ id: bob, name: 'Bob', balanceCents: 2000 }
+			{ id: expect.any(Number), name: 'Aaron', balanceCents: 0, lastBuyIn: null },
+			{ id: alice, name: 'Alice', balanceCents: 0, lastBuyIn: null },
+			{ id: bob, name: 'Bob', balanceCents: 2000, lastBuyIn: { entryId, cents: 2000 } }
 		]);
 	});
 

@@ -66,9 +66,33 @@
 	}
 
 	// One-tap buy-ins have no confirmation, so each one offers Undo for a few seconds instead.
-	let toast = $state<{ entryId: number; text: string } | null>(null);
+	// A later mis-tap can still be removed from the player's ⋯ sheet ("Remove last buy-in").
+	let toast = $state<{ text: string; undoEntryId?: number } | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout>;
 	let busyPlayer = $state<number | null>(null);
+
+	function showToast(text: string, undoEntryId?: number) {
+		clearTimeout(toastTimer);
+		toast = { text, undoEntryId };
+		toastTimer = setTimeout(() => (toast = null), 6000);
+	}
+
+	// "Remove last buy-in" posts this hidden form with the entry to delete.
+	let removeForm = $state<HTMLFormElement>();
+	let removing = $state<{ entryId: number; text: string } | null>(null);
+
+	function removeLastBuyIn(player: {
+		name: string;
+		lastBuyIn: { entryId: number; cents: number } | null;
+	}) {
+		if (!player.lastBuyIn) return;
+		removing = {
+			entryId: player.lastBuyIn.entryId,
+			text: `Removed ${formatCents(player.lastBuyIn.cents)} buy-in from ${player.name}`
+		};
+		pending = null;
+		queueMicrotask(() => removeForm?.requestSubmit());
+	}
 
 	function buyinSubmit(player: { id: number; name: string }) {
 		const cents = amountCents!;
@@ -79,12 +103,7 @@
 				busyPlayer = null;
 				await update();
 				if (result.type === 'success' && result.data?.entryId) {
-					clearTimeout(toastTimer);
-					toast = {
-						entryId: result.data.entryId,
-						text: `Added ${formatCents(cents)} to ${player.name}`
-					};
-					toastTimer = setTimeout(() => (toast = null), 6000);
+					showToast(`Added ${formatCents(cents)} to ${player.name}`, result.data.entryId);
 				}
 			};
 		};
@@ -216,6 +235,22 @@
 		<input type="hidden" name="amount" value={amount} />
 	</form>
 
+	<form
+		method="POST"
+		action="?/undo"
+		hidden
+		bind:this={removeForm}
+		use:enhance={() => {
+			const text = removing?.text;
+			return async ({ result, update }) => {
+				await update(); // on failure this shows the server's error message at the top
+				if (result.type === 'success' && text) showToast(text);
+			};
+		}}
+	>
+		<input type="hidden" name="entryId" value={removing?.entryId ?? ''} />
+	</form>
+
 	{#if toast}
 		<div
 			role="status"
@@ -225,18 +260,20 @@
 			<div
 				class="flex w-full items-center gap-3 rounded-box bg-neutral py-2 pr-2 pl-4 text-neutral-content shadow-lg"
 			>
-				<span class="min-w-0 flex-1 truncate">{toast.text}</span>
-				<form
-					method="POST"
-					action="?/undo"
-					use:enhance={() => {
-						toast = null;
-						return async ({ update }) => update();
-					}}
-				>
-					<input type="hidden" name="entryId" value={toast.entryId} />
-					<button class="btn btn-ghost text-neutral-content">Undo</button>
-				</form>
+				<span class="min-h-12 min-w-0 flex-1 content-center truncate">{toast.text}</span>
+				{#if toast.undoEntryId}
+					<form
+						method="POST"
+						action="?/undo"
+						use:enhance={() => {
+							toast = null;
+							return async ({ update }) => update();
+						}}
+					>
+						<input type="hidden" name="entryId" value={toast.undoEntryId} />
+						<button class="btn btn-ghost text-neutral-content">Undo</button>
+					</form>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -308,7 +345,15 @@
 			subtitle={describeBalance(p.balanceCents)}
 			onclose={() => (pending = null)}
 			options={[
-				{ label: 'Cash out', tone: 'primary', onselect: () => open('cashout', p) },
+				...(p.lastBuyIn
+					? [
+							{
+								label: `Remove last buy-in (+${formatCents(p.lastBuyIn.cents)})`,
+								onselect: () => removeLastBuyIn(p)
+							}
+						]
+					: []),
+				{ label: 'Cash out', tone: 'primary' as const, onselect: () => open('cashout', p) },
 				{ label: 'Set amount', onselect: () => open('set', p) },
 				{
 					label: 'Clear balance',
