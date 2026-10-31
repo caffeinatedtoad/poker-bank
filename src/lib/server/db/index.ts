@@ -1,10 +1,6 @@
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-import * as schema from './schema';
 import { DATABASE_URL } from '$app/env/private';
+import { openDb } from './open';
 
-if (!DATABASE_URL) throw new Error('DATABASE_URL is not set');
-
-const client = new Database(DATABASE_URL);
-
-export const db = drizzle(client, { schema });
+// The app-wide database handle, opened once when the server starts.
+// Kept apart from open.ts because tests can't read SvelteKit's $app/env.
+export const db = openDb(DATABASE_URL);

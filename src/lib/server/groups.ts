@@ -1,0 +1,46 @@
+import { error } from '@sveltejs/kit';
+import { countDistinct, eq, sql } from 'drizzle-orm';
+import type { DB } from './db/open';
+import { entries, groups, players, type Group } from './db/schema';
+
+export function createGroup(
+	db: DB,
+	input: { name: string; bankEmail: string; defaultBuyinCents: number }
+): number {
+	const row = db.insert(groups).values(input).returning({ id: groups.id }).get();
+	return row.id;
+}
+
+/** Every group with its player count and total owed to the bank. */
+export function listGroups(db: DB) {
+	return db
+		.select({
+			id: groups.id,
+			name: groups.name,
+			bankEmail: groups.bankEmail,
+			playerCount: countDistinct(players.id),
+			totalCents: sql<number>`coalesce(sum(${entries.deltaCents}), 0)`
+		})
+		.from(groups)
+		.leftJoin(players, eq(players.groupId, groups.id))
+		.leftJoin(entries, eq(entries.playerId, players.id))
+		.groupBy(groups.id)
+		.orderBy(groups.name)
+		.all();
+}
+
+/** The group with this id, or a 404. */
+export function getGroup(db: DB, id: number): Group {
+	const group = db.select().from(groups).where(eq(groups.id, id)).get();
+	if (!group) error(404, 'Group not found');
+	return group;
+}
+
+/** Throws 403 unless `user` is this group's bank. Call it at the top of every bank-only action. */
+export function requireBank(group: Group, user: string): void {
+	if (group.bankEmail !== user) error(403, 'Only the bank can do that');
+}
+
+export function setDefaultBuyin(db: DB, groupId: number, cents: number): void {
+	db.update(groups).set({ defaultBuyinCents: cents }).where(eq(groups.id, groupId)).run();
+}

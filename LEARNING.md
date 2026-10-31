@@ -51,3 +51,22 @@ The browser updates without a reload. That's Vite's hot module replacement.
 - `export` = capitalized identifier in Go. Anything not exported is package-private.
 - `src/lib/money.test.ts` sits next to the code like `money_test.go`. `it.each([...])` is a table-driven test.
   Run `npm run test:unit` for watch mode, which re-runs tests on save.
+
+## Step 3: database and ledger
+
+- `src/lib/server/db/schema.ts` defines the tables in TypeScript. `npm run db:generate` diffs it against
+  `drizzle/` and writes a new numbered `.sql` migration (like `goose create`). Commit those files.
+  Read `drizzle/0000_init.sql` to see exactly what SQL Drizzle generated.
+- The app runs pending migrations itself on startup (`openDb` in `db/open.ts`). There's no separate migrate step.
+- Drizzle is a typed query builder, closer to `squirrel`/`sqlc` than to an ORM like GORM:
+  `db.select().from(players).where(eq(players.groupId, id)).all()` maps straight to the SQL you'd write.
+  `.all()` returns rows, `.get()` one row or `undefined`, `.run()` executes.
+- better-sqlite3 is **synchronous**, so there's no `await` anywhere in the data layer. In-process SQLite
+  calls take microseconds, so blocking is fine, and the code reads like Go.
+- Service functions take `db: DB` as the first argument (dependency injection, as in Go).
+  The app passes the shared handle from `db/index.ts`, and tests pass `openDb(':memory:')`.
+  `DB` also matches a transaction (`tx`), so the same helper works inside or outside one.
+- `error(404, '...')` from `@sveltejs/kit` **throws**, which aborts the request with that status.
+  Think of it as `panic` that SvelteKit recovers into an HTTP response, with no `if err != nil` chain.
+- Balances are never stored. They're `SUM(delta_cents)` over an append-only `entries` table, so "clear" and
+  "set" append a correcting entry and the full history survives mistakes.
