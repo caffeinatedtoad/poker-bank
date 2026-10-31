@@ -31,12 +31,15 @@ An attractive web app to track poker totals for a friend group.
 
 ## Status
 
-Planning only. Nothing has been implemented yet.
+Iteration 1 is built (October 31, 2026). Banks create groups, add and remove players, record buy-ins
+(prefilled, editable amount), and clear or set balances behind confirmation dialogs. Everyone signed in can
+view every group, and pages refresh every 5 seconds. There's an arm64 image plus k8s manifests. Not yet deployed.
+
+See `README.md` to run and deploy, and `LEARNING.md` for a SvelteKit-for-Go-developers guide to the code.
 
 ## Next steps
 
-1. Scaffold the SvelteKit app with Tailwind/DaisyUI and Drizzle + SQLite.
-2. Define the data model (players, nights/sessions, buy-ins/rebuys, cash-outs, running totals).
-3. Add header-based auth and bank-only edit permissions.
-4. Write the Dockerfile (arm64) and k8s manifests (Deployment, Service, PVC).
-5. Deploy via Rancher and expose it through Pangolin.
+1. Push the image to GHCR and deploy to the Pi with Rancher (`README.md`, "Deploying to the Pi").
+2. Confirm the identity header name Pangolin actually sends (`AUTH_EMAIL_HEADER`).
+3. Candidates for iteration 2: history view per player (the ledger already stores it), nights/sessions,
+   cash-outs as their own action, co-banks, deleting groups.

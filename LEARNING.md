@@ -24,6 +24,21 @@ This file grows with each build step. Start with the concept map, then the tour 
 Rule of thumb: **all logic lives in `src/lib/server` as plain functions** that take arguments and return
 values. Routes are thin handlers that call them, and pages only display data and post forms.
 
+## Follow one request: the bank taps a chip
+
+1. **Browser:** the chip is a `<button>` inside `<form method="POST" action="?/buyin">` in
+   `src/routes/g/[id]/+page.svelte`, with hidden inputs `playerId` and `amount`. `use:enhance` sends it with `fetch`.
+2. **Middleware:** `src/hooks.server.ts` reads the `remote-email` header into `locals.user` (or returns 401).
+3. **CSRF (production only):** SvelteKit checks the `Origin` header matches the site, or returns 403.
+4. **Handler:** `actions.buyin` in `src/routes/g/[id]/+page.server.ts` calls `bankGroup()` (404 or 403),
+   then reads `playerId` and `amount` with `#lib/server/forms.ts` (400 if invalid).
+5. **Service:** `buyIn()` in `src/lib/server/ledger.ts` checks the player belongs to this group, then
+   inserts one `entries` row with `delta_cents = 2000, kind = 'buyin'`.
+6. **Response:** the action returns nothing (success). `use:enhance` then re-runs `load()`, which calls
+   `listPlayers()` (`SUM(delta_cents)` per player) and sends the new `data` as JSON.
+7. **Re-render:** Svelte updates the balance and total in place. Within 5 seconds every other viewer's
+   poll (`refreshAll()`) picks up the same change.
+
 ## Tour of the files (step 1: scaffold)
 
 - `package.json`: dependencies and the `scripts` you run with `npm run <name>`, like a Makefile.
