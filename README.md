@@ -1,129 +1,136 @@
 # Poker Tracker
 
-Tracks how much each player owes the bank during poker nights. Self-hosted on k3s behind Pangolin SSO.
-See `PROJECT_SUMMARY.md` for the background and `LEARNING.md` for how the code maps to Go concepts.
+A small, self-hosted web app for keeping score at home poker games. One person acts as the bank: they record
+buy-ins and cash-outs, and everyone at the table can see who's in the green and who's in the red. It's built for
+phones and runs as a single container on Kubernetes, behind an SSO proxy such as [Pangolin](https://github.com/fosrl/pangolin).
 
-## Setup
+## Features
 
-Requires Node 22 (pinned in `.nvmrc`) and npm 11. npm 10 crashes on this dependency tree with
-`Cannot read properties of null (reading 'edgesOut')`.
+- **Groups with their own bank.** Anyone signed in can create a group and becomes its bank. Everyone else can view.
+- **One-tap buy-ins** with a confirmation, an Undo toast, and an adjustable amount (−/+ $5 or a custom value).
+- **Cash-outs** at the end of the night: enter a player's chips and see them land in the green or the red.
+- **Full history per player**, with any mistaken buy-in removable, and a chart of how their night went.
+- **Set or clear** a balance directly, always behind a confirmation that shows the before and after.
+- **Live updates** for everyone watching, every 5 seconds.
+- **Mobile first:** large touch targets, thumb-reach controls, light and dark themes, and Add to Home Screen support.
+
+## How it works
+
+- **Sign-in is handled by your proxy.** The app has no login of its own. It reads the signed-in user's email from
+  a request header set by the proxy (`remote-email` by default) and rejects requests without it.
+- **Balances are an append-only ledger** in SQLite. A balance is the sum of its entries, so clears and
+  corrections never erase history.
+- **Stack:** SvelteKit (Node adapter), SQLite via Drizzle ORM, Tailwind CSS with DaisyUI.
+
+## Install
+
+You need a Kubernetes cluster with a storage class (k3s's `local-path` is the default) and an identity-aware
+proxy that forwards the signed-in user's email as a header.
 
 ```sh
-nvm use            # picks Node 22 from .nvmrc
-npm i -g npm@11    # once per Node install
-npm install
-cp .env.example .env
+helm repo add poker-tracker https://caffeinatedtoad.github.io/poker-bank
+helm repo update
+helm upgrade --install poker-tracker poker-tracker/poker-tracker -n poker --create-namespace
 ```
 
-## Everyday commands
+Then point your proxy at `http://poker-tracker.poker.svc:80` (it must run inside the cluster to reach the
+ClusterIP Service) and enable SSO for it. Open the app through the proxy and your email appears in the top
+right. If you see `Not signed in: missing the "remote-email" header`, set the header name your proxy uses:
 
-| Command             | What it does                                                               | Go equivalent              |
-| ------------------- | -------------------------------------------------------------------------- | -------------------------- |
-| `npm run dev`       | Dev server on http://localhost:5173 with hot reload                        | `go run .` (with `air`)    |
-| `npm test`          | Run unit tests once                                                        | `go test ./...`            |
-| `npm run test:unit` | Run tests in watch mode                                                    | —                          |
-| `npm run check`     | Type-check TypeScript and Svelte files                                     | `go vet` / compiler errors |
-| `npm run format`    | Format all files with Prettier                                             | `gofmt -w .`               |
-| `npm run build`     | Production build into `build/`                                             | `go build`                 |
-| `npm start`         | Run the production build with `.env` loaded (`node --env-file=.env build`) | `./poker-tracker`          |
+```sh
+helm upgrade poker-tracker poker-tracker/poker-tracker -n poker --reuse-values --set auth.emailHeader=<header>
+```
 
-`npm start` behaves like production. CSRF protection is on, and the server assumes `https` (true behind Pangolin),
-so forms posted over plain `http://localhost` are rejected. Use `npm run dev` for local work.
+On a phone, open the app and choose **Share → Add to Home Screen** to get a full-screen app with its own icon.
 
-## On your phone
+### Configuration
 
-Open the app in Safari (or Chrome on Android), then **Share → Add to Home Screen**. It gets the chip icon and opens
-full screen like an app.
+| Value                      | Default                              | Description                                                |
+| -------------------------- | ------------------------------------ | ---------------------------------------------------------- |
+| `image.repository`         | `ghcr.io/caffeinatedtoad/poker-bank` | Container image                                            |
+| `image.tag`                | the chart's `appVersion`             | Image tag; each chart version pins the image built with it |
+| `image.pullPolicy`         | `IfNotPresent`                       | Image pull policy                                          |
+| `imagePullSecrets`         | `[]`                                 | Pull secrets, if you use a private image                   |
+| `auth.emailHeader`         | `remote-email`                       | Header your proxy uses for the signed-in user's email      |
+| `persistence.storageClass` | `local-path`                         | Storage class for the SQLite volume                        |
+| `persistence.size`         | `1Gi`                                | Size of the SQLite volume                                  |
+| `service.port`             | `80`                                 | Service port                                               |
+| `resources`                | 50m CPU / 64Mi requested, 256Mi max  | Container resources                                        |
 
-## Trying it as different users
+The chart always runs a single replica with the `Recreate` strategy, because SQLite allows only one writer.
+The data volume is kept on `helm uninstall`, and reinstalling with the same release name reuses it.
 
-Locally you're `DEV_USER` from `.env`. To act as someone else, send the auth header yourself:
+### Upgrading
+
+```sh
+helm repo update
+helm upgrade poker-tracker poker-tracker/poker-tracker -n poker --reuse-values
+```
+
+### Security
+
+The app trusts the identity header completely, so **anything that can reach the pod directly can claim to be
+any user**. The chart's Service is always `ClusterIP`. Don't add a NodePort, LoadBalancer or Ingress that
+bypasses your proxy.
+
+### Backups
+
+SQLite runs in WAL mode, so copying `poker.db` while the app is running can miss recent changes. Take a
+consistent snapshot instead:
+
+```sh
+kubectl -n poker exec deploy/poker-tracker -- node -e \
+  "require('better-sqlite3')('/data/poker.db').backup('/data/backup.db').then(() => console.log('ok'))"
+pod=$(kubectl -n poker get pod -l app.kubernetes.io/name=poker-tracker -o name | cut -d/ -f2)
+kubectl -n poker cp "$pod:/data/backup.db" ./poker-backup.db
+```
+
+## Development
+
+Requires Node 22 (pinned in `.nvmrc`) and npm 11. npm 10 fails on this dependency tree.
+
+```sh
+nvm use
+npm install -g npm@11
+npm install
+cp .env.example .env    # sets DEV_USER, the email you act as locally
+npm run dev             # http://localhost:5173
+```
+
+| Command               | Description                                                         |
+| --------------------- | ------------------------------------------------------------------- |
+| `npm run dev`         | Dev server with hot reload                                          |
+| `npm test`            | Unit tests (`npm run test:unit` for watch mode)                     |
+| `npm run check`       | Type-check TypeScript and Svelte                                    |
+| `npm run format`      | Format with Prettier                                                |
+| `npm run build`       | Production build into `build/`                                      |
+| `npm start`           | Run the production build with `.env` loaded                         |
+| `npm run db:generate` | Create a SQL migration after changing `src/lib/server/db/schema.ts` |
+| `npm run db:studio`   | Browse the local database                                           |
+
+To act as another user locally, send the identity header yourself:
 
 ```sh
 curl -H 'remote-email: sam@example.com' http://localhost:5173/
 ```
 
-## Releasing (GitHub Actions)
+`npm start` behaves like production: CSRF protection is on and the server assumes HTTPS, so form posts over
+plain `http://localhost` are rejected. Use `npm run dev` for local work.
 
-`.github/workflows/release.yml` runs on every push to `main`. It runs the tests, then publishes only what's new:
+[LEARNING.md](LEARNING.md) walks through the codebase for developers coming from Go and backend work.
 
-- **Image:** `ghcr.io/caffeinatedtoad/poker-bank:<appVersion>` (and `:latest`) for arm64 and amd64, if that tag
-  doesn't exist yet. Published tags are never overwritten.
-- **Chart:** a GitHub release with the packaged chart, plus an updated `index.yaml` on the `gh-pages` branch, if
-  the chart's `version` hasn't been released yet. GitHub Pages serves that branch as a Helm repository.
+## Releasing
 
-**To release**, edit `charts/poker-tracker/Chart.yaml`, then commit and push to `main`:
+Releases are driven by `charts/poker-tracker/Chart.yaml`. Bump the version and push to `main`:
 
-| What changed                                                  | Bump                           |
-| ------------------------------------------------------------- | ------------------------------ |
-| The app (any code under `src/`, the Dockerfile, dependencies) | `version` **and** `appVersion` |
-| Only the chart (templates, values)                            | `version`                      |
+| Change                                    | Bump                           |
+| ----------------------------------------- | ------------------------------ |
+| App code, the Dockerfile, or dependencies | `version` **and** `appVersion` |
+| Chart only (templates or values)          | `version`                      |
 
-**One-time setup on GitHub:**
+The [release workflow](.github/workflows/release.yml) runs the tests and then publishes anything new:
 
-1. Create the repo `caffeinatedtoad/poker-bank` (the image and Pages URLs in this README and `values.yaml` use
-   that name) and push both branches: `git remote add origin <url> && git push -u origin main gh-pages`.
-2. **Settings → Pages:** Source _Deploy from a branch_, branch `gh-pages`, folder `/ (root)`.
-3. After the first run, open the package (caffeinatedtoad → Packages → poker-bank) and set its visibility to
-   **public**, or use a pull secret (see `imagePullSecrets` in `values.yaml`).
+- the image `ghcr.io/caffeinatedtoad/poker-bank:<appVersion>` for arm64 and amd64 (existing tags are never overwritten)
+- the chart as a GitHub release, with the Helm repository index on the `gh-pages` branch served by GitHub Pages
 
-Pages and release downloads need the repo to be **public**, unless you're on a paid GitHub plan. Helm fetches
-the chart without logging in.
-
-## Deploying to the Pi
-
-The Helm chart in `charts/poker-tracker` creates the Deployment, a ClusterIP Service and the data volume.
-Settings you might change are in `charts/poker-tracker/values.yaml`.
-
-1. **Install from the Helm repository** (with your kubeconfig pointing at the Pi's cluster):
-
-   ```sh
-   helm repo add poker-tracker https://caffeinatedtoad.github.io/poker-bank
-   helm repo update
-   helm upgrade --install poker-tracker poker-tracker/poker-tracker -n poker --create-namespace
-   ```
-
-   To upgrade after a release, run `helm repo update` and the same `helm upgrade --install` again.
-   In Rancher you can instead add the URL under **Apps → Repositories** and install it from **Apps → Charts**.
-
-2. **Or deploy from this checkout without a release.** Build and push an image whose tag matches `appVersion`,
-   then install the local chart:
-
-   ```sh
-   docker buildx build --platform linux/arm64 -t ghcr.io/caffeinatedtoad/poker-bank:0.1.0 --push .
-   helm upgrade --install poker-tracker charts/poker-tracker -n poker --create-namespace
-   ```
-
-   `helm template poker-tracker charts/poker-tracker` prints the plain YAML to see exactly what gets applied.
-
-3. **Expose it through Pangolin.** Add a resource pointing at `http://poker-tracker.poker.svc:80` (Newt must
-   run inside the cluster to reach a ClusterIP Service) and turn on SSO for it.
-
-4. **Check the identity header.** Open the app through Pangolin. Your email should show in the top right.
-   If you get "Not signed in: missing the "remote-email" header", find the header your Pangolin version sends:
-
-   ```sh
-   helm upgrade poker-tracker poker-tracker/poker-tracker -n poker --reuse-values --set auth.emailHeader=<header>
-   ```
-
-   (Use `charts/poker-tracker` in place of `poker-tracker/poker-tracker` if you installed from a checkout.)
-
-`helm uninstall poker-tracker -n poker` removes the app but **keeps the data volume**
-(`poker-tracker-data`), and reinstalling picks it up again.
-
-### Security model
-
-The app has no login of its own. It trusts the email header from Pangolin, so **anything that can reach the
-pod directly can claim to be anyone**. Keep the Service `ClusterIP`, and never add a NodePort, LoadBalancer or
-Ingress that bypasses Pangolin.
-
-### Backups
-
-SQLite runs in WAL mode, so the live database is three files (`poker.db`, `-wal`, `-shm`). Copying only
-`poker.db` while the app runs can miss recent changes. Take a consistent snapshot instead:
-
-```sh
-kubectl -n poker exec deploy/poker-tracker -- node -e \
-  "require('better-sqlite3')('/data/poker.db').backup('/data/backup.db').then(() => console.log('ok'))"
-kubectl -n poker cp "$(kubectl -n poker get pod -l app=poker-tracker -o name | cut -d/ -f2)":/data/backup.db ./poker-backup.db
-```
+A push that doesn't bump a version runs the tests and publishes nothing.
