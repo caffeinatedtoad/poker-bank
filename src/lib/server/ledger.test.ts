@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDb } from './db/open';
 import { entries } from './db/schema';
-import { createGroup, getGroup, listGroups, requireBank } from './groups';
+import {
+	createGroup,
+	deleteGroup,
+	getGroup,
+	listDeletedGroups,
+	listGroups,
+	requireBank,
+	restoreGroup
+} from './groups';
 import {
 	addPlayer,
 	balanceOf,
@@ -182,5 +190,29 @@ describe('groups', () => {
 		const group = getGroup(db, groupId);
 		expect(thrownStatus(() => requireBank(group, BANK))).toBeUndefined();
 		expect(thrownStatus(() => requireBank(group, 'someone@else.com'))).toBe(403);
+	});
+
+	it('deletes a group so it disappears, and restores it with players and history intact', () => {
+		buyIn(db, groupId, alice, 2000, BANK);
+		deleteGroup(db, groupId);
+		expect(listGroups(db)).toEqual([]);
+		expect(thrownStatus(() => getGroup(db, groupId))).toBe(404);
+		expect(listDeletedGroups(db, BANK)).toEqual([
+			{ id: groupId, name: 'Friday', deletedAt: expect.any(Date) }
+		]);
+
+		restoreGroup(db, groupId, BANK);
+		expect(getGroup(db, groupId).name).toBe('Friday');
+		expect(listDeletedGroups(db, BANK)).toEqual([]);
+		expect(balanceOf(db, alice)).toBe(2000);
+	});
+
+	it('only lets the bank see and restore its deleted groups', () => {
+		deleteGroup(db, groupId);
+		expect(listDeletedGroups(db, 'someone@else.com')).toEqual([]);
+		expect(thrownStatus(() => restoreGroup(db, groupId, 'someone@else.com'))).toBe(404);
+		expect(thrownStatus(() => getGroup(db, groupId))).toBe(404);
+		restoreGroup(db, groupId, BANK);
+		expect(thrownStatus(() => restoreGroup(db, groupId, BANK))).toBe(404); // not deleted any more
 	});
 });

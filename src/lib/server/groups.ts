@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { countDistinct, eq, sql } from 'drizzle-orm';
+import { and, countDistinct, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { DB } from './db/open';
 import { entries, groups, players, type Group } from './db/schema';
 
@@ -11,7 +11,7 @@ export function createGroup(
 	return row.id;
 }
 
-/** Every group with its player count and total owed to the bank. */
+/** Every group (except deleted ones) with its player count and total owed to the bank. */
 export function listGroups(db: DB) {
 	return db
 		.select({
@@ -24,14 +24,19 @@ export function listGroups(db: DB) {
 		.from(groups)
 		.leftJoin(players, eq(players.groupId, groups.id))
 		.leftJoin(entries, eq(entries.playerId, players.id))
+		.where(isNull(groups.deletedAt))
 		.groupBy(groups.id)
 		.orderBy(groups.name)
 		.all();
 }
 
-/** The group with this id, or a 404. */
+/** The group with this id, or a 404. Deleted groups 404 too, so every page and action ignores them. */
 export function getGroup(db: DB, id: number): Group {
-	const group = db.select().from(groups).where(eq(groups.id, id)).get();
+	const group = db
+		.select()
+		.from(groups)
+		.where(and(eq(groups.id, id), isNull(groups.deletedAt)))
+		.get();
 	if (!group) error(404, 'Group not found');
 	return group;
 }
@@ -50,4 +55,29 @@ export function requireBank(group: Group, user: string): void {
 
 export function setDefaultBuyin(db: DB, groupId: number, cents: number): void {
 	db.update(groups).set({ defaultBuyinCents: cents }).where(eq(groups.id, groupId)).run();
+}
+
+/** Hides the group from everyone. Players and history are kept so restoreGroup can bring it all back. */
+export function deleteGroup(db: DB, groupId: number): void {
+	db.update(groups).set({ deletedAt: new Date() }).where(eq(groups.id, groupId)).run();
+}
+
+/** Groups this user deleted as their bank, newest deletion first, so they can restore one. */
+export function listDeletedGroups(db: DB, user: string) {
+	return db
+		.select({ id: groups.id, name: groups.name, deletedAt: groups.deletedAt })
+		.from(groups)
+		.where(and(eq(groups.bankEmail, user), isNotNull(groups.deletedAt)))
+		.orderBy(desc(groups.deletedAt), desc(groups.id))
+		.all();
+}
+
+/** Un-deletes a group. 404s unless `user` is its bank and it is deleted, since the id comes from a form. */
+export function restoreGroup(db: DB, groupId: number, user: string): void {
+	const { changes } = db
+		.update(groups)
+		.set({ deletedAt: null })
+		.where(and(eq(groups.id, groupId), eq(groups.bankEmail, user), isNotNull(groups.deletedAt)))
+		.run();
+	if (changes === 0) error(404, 'No deleted group of yours to restore');
 }

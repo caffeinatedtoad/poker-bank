@@ -14,7 +14,9 @@ export const groups = sqliteTable('groups', {
 	name: text('name').notNull(),
 	bankEmail: text('bank_email').notNull(),
 	defaultBuyinCents: integer('default_buyin_cents').notNull(),
-	createdAt: createdAt()
+	createdAt: createdAt(),
+	// Set when the bank deletes the group. The rows stay so the bank can restore it later.
+	deletedAt: integer('deleted_at', { mode: 'timestamp' })
 });
 
 export const players = sqliteTable('players', {

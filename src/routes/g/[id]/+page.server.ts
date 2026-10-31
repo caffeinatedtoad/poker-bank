@@ -1,7 +1,12 @@
-import { fail } from '@sveltejs/kit';
+import { fail, redirect } from '@sveltejs/kit';
 import { db } from '#lib/server/db/index.ts';
 import * as forms from '#lib/server/forms.ts';
-import { getGroupFromParam, requireBank, setDefaultBuyin } from '#lib/server/groups.ts';
+import {
+	deleteGroup,
+	getGroupFromParam,
+	requireBank,
+	setDefaultBuyin
+} from '#lib/server/groups.ts';
 import {
 	addPlayer,
 	buyIn,
@@ -95,5 +100,11 @@ export const actions: Actions = {
 		const amount = forms.cents(await request.formData(), 'amount', { positive: true });
 		if (!amount) return fail(400, { error: 'Enter a buy-in amount above zero, like 20.' });
 		setDefaultBuyin(db, group.id, amount);
+	},
+
+	deleteGroup: ({ params, locals }) => {
+		const group = bankGroup(params, locals.user);
+		deleteGroup(db, group.id);
+		redirect(303, '/'); // the home page lists it under "Deleted groups" with a Restore button
 	}
 };

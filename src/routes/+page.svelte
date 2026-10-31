@@ -77,3 +77,26 @@
 	{#if form?.error}<p role="alert" class="text-error">{form.error}</p>{/if}
 	<button class="btn btn-primary">Create group</button>
 </form>
+
+<!-- Only the bank sees the groups it deleted, so it can undo an accidental delete. -->
+{#if data.deleted.length > 0}
+	<section class="mt-10">
+		<h2 class="font-display text-3xl font-bold">Deleted groups</h2>
+		<ul class="mt-2 divide-y divide-base-300 border-y border-base-300">
+			{#each data.deleted as group (group.id)}
+				<li class="flex min-h-16 items-center gap-4 py-3">
+					<span class="min-w-0 flex-1">
+						<span class="block truncate text-lg font-bold">{group.name}</span>
+						<span class="block text-sm opacity-75">
+							Deleted {group.deletedAt?.toLocaleDateString()}
+						</span>
+					</span>
+					<form method="POST" action="?/restore" use:enhance>
+						<input type="hidden" name="groupId" value={group.id} />
+						<button class="btn">Restore</button>
+					</form>
+				</li>
+			{/each}
+		</ul>
+	</section>
+{/if}

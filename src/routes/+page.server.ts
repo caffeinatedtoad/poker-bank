@@ -1,12 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { db } from '#lib/server/db/index.ts';
 import * as forms from '#lib/server/forms.ts';
-import { createGroup, listGroups } from '#lib/server/groups.ts';
+import { createGroup, listDeletedGroups, listGroups, restoreGroup } from '#lib/server/groups.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 // load() runs on the server for every GET of `/`. Whatever it returns becomes `data` in +page.svelte.
-export const load: PageServerLoad = () => {
-	return { groups: listGroups(db) };
+export const load: PageServerLoad = ({ locals }) => {
+	return { groups: listGroups(db), deleted: listDeletedGroups(db, locals.user) };
 };
 
 // actions are POST handlers. <form method="POST" action="?/create"> calls `create`.
@@ -21,5 +21,13 @@ export const actions: Actions = {
 
 		const id = createGroup(db, { name, bankEmail: locals.user, defaultBuyinCents: buyin });
 		redirect(303, `/g/${id}`); // 303 See Other: the POST/redirect/GET pattern
+	},
+
+	restore: async ({ request, locals }) => {
+		const groupId = forms.id(await request.formData(), 'groupId');
+		if (!groupId)
+			return fail(400, { error: 'That group is missing from the form. Reload and try again.' });
+		restoreGroup(db, groupId, locals.user); // 404s unless this user is its bank
+		redirect(303, `/g/${groupId}`);
 	}
 };

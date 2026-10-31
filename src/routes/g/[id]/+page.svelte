@@ -34,7 +34,9 @@
 
 	// Which sheet or confirmation is open, if any. 'menu' is the ⋯ sheet (history and actions) for a player.
 	type PlayerSheet = 'buyin' | 'menu' | 'cashout' | 'set' | 'clear' | 'remove';
-	let pending = $state<{ kind: PlayerSheet; playerId: number } | { kind: 'amount' } | null>(null);
+	let pending = $state<
+		{ kind: PlayerSheet; playerId: number } | { kind: 'amount' | 'deleteGroup' } | null
+	>(null);
 	let pendingPlayerId = $derived(pending && 'playerId' in pending ? pending.playerId : null);
 	let pendingPlayer = $derived(data.players.find((p) => p.id === pendingPlayerId));
 
@@ -213,6 +215,10 @@
 			</label>
 			<button class="btn btn-primary">Add player</button>
 		</form>
+		<button
+			class="btn mt-10 w-full btn-outline btn-error"
+			onclick={() => (pending = { kind: 'deleteGroup' })}>Delete group</button
+		>
 	{/if}
 </div>
 
@@ -307,6 +313,19 @@
 				<span>Make {formatCents(amountDraftCents!)} the group's default</span>
 			</label>
 		{/if}
+	</ConfirmDialog>
+{:else if pending?.kind === 'deleteGroup'}
+	<ConfirmDialog
+		title="Delete {data.group.name}?"
+		action="?/deleteGroup"
+		confirmLabel="Delete group"
+		danger
+		onclose={() => (pending = null)}
+	>
+		<p class="text-lg">
+			It disappears for everyone. You can restore it, with every player and balance, from "Deleted
+			groups" on the home page.
+		</p>
 	</ConfirmDialog>
 {:else if pending && pendingPlayer}
 	{@const p = pendingPlayer}
