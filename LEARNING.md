@@ -41,3 +41,13 @@ values. Routes are thin handlers that call them, and pages only display data and
 
 `npm run dev`, open http://localhost:5173, then edit the text in `src/routes/+page.svelte` and save.
 The browser updates without a reload. That's Vite's hot module replacement.
+
+## Step 2: money helpers and tests
+
+- `src/lib/money.ts` is plain TypeScript with no framework code. It lives in `src/lib` (not `lib/server`)
+  because both the server and the browser format money.
+- TypeScript in Go terms: `number | null` is like returning `(int, bool)`. The caller must handle `null`
+  before using the value, and the compiler enforces that.
+- `export` = capitalized identifier in Go. Anything not exported is package-private.
+- `src/lib/money.test.ts` sits next to the code like `money_test.go`. `it.each([...])` is a table-driven test.
+  Run `npm run test:unit` for watch mode, which re-runs tests on save.
