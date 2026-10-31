@@ -47,7 +47,7 @@ curl -H 'remote-email: sam@example.com' http://localhost:5173/
 
 `.github/workflows/release.yml` runs on every push to `main`. It runs the tests, then publishes only what's new:
 
-- **Image:** `ghcr.io/harrisonwaffel/poker-tracker:<appVersion>` (and `:latest`) for arm64 and amd64, if that tag
+- **Image:** `ghcr.io/caffeinatedtoad/poker-bank:<appVersion>` (and `:latest`) for arm64 and amd64, if that tag
   doesn't exist yet. Published tags are never overwritten.
 - **Chart:** a GitHub release with the packaged chart, plus an updated `index.yaml` on the `gh-pages` branch, if
   the chart's `version` hasn't been released yet. GitHub Pages serves that branch as a Helm repository.
@@ -61,10 +61,10 @@ curl -H 'remote-email: sam@example.com' http://localhost:5173/
 
 **One-time setup on GitHub:**
 
-1. Create the repo (`HarrisonWAffel/poker-tracker`; the image and Pages URLs below assume that name) and push
-   both branches: `git remote add origin <url> && git push -u origin main gh-pages`.
+1. Create the repo `caffeinatedtoad/poker-bank` (the image and Pages URLs in this README and `values.yaml` use
+   that name) and push both branches: `git remote add origin <url> && git push -u origin main gh-pages`.
 2. **Settings → Pages:** Source _Deploy from a branch_, branch `gh-pages`, folder `/ (root)`.
-3. After the first run, open the package (your profile → Packages → poker-tracker) and set its visibility to
+3. After the first run, open the package (caffeinatedtoad → Packages → poker-bank) and set its visibility to
    **public**, or use a pull secret (see `imagePullSecrets` in `values.yaml`).
 
 Pages and release downloads need the repo to be **public**, unless you're on a paid GitHub plan. Helm fetches
@@ -78,7 +78,7 @@ Settings you might change are in `charts/poker-tracker/values.yaml`.
 1. **Install from the Helm repository** (with your kubeconfig pointing at the Pi's cluster):
 
    ```sh
-   helm repo add poker-tracker https://harrisonwaffel.github.io/poker-tracker
+   helm repo add poker-tracker https://caffeinatedtoad.github.io/poker-bank
    helm repo update
    helm upgrade --install poker-tracker poker-tracker/poker-tracker -n poker --create-namespace
    ```
@@ -90,7 +90,7 @@ Settings you might change are in `charts/poker-tracker/values.yaml`.
    then install the local chart:
 
    ```sh
-   docker buildx build --platform linux/arm64 -t ghcr.io/harrisonwaffel/poker-tracker:0.1.0 --push .
+   docker buildx build --platform linux/arm64 -t ghcr.io/caffeinatedtoad/poker-bank:0.1.0 --push .
    helm upgrade --install poker-tracker charts/poker-tracker -n poker --create-namespace
    ```
 

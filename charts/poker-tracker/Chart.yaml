@@ -2,6 +2,8 @@ apiVersion: v2
 name: poker-tracker
 description: Tracks what each player owes the bank on poker night. SQLite on a single pod, behind Pangolin SSO.
 type: application
-# Bump `version` when the chart itself changes; `appVersion` is informational (the image tag is in values.yaml).
+home: https://github.com/caffeinatedtoad/poker-bank
+# `version`: bump on every release. `appVersion`: the image tag the chart runs; bump it when the app changes.
+# Pushing a bump to main publishes both (see README, Releasing).
 version: 0.1.0
 appVersion: "0.1.0"

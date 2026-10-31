@@ -1,5 +1,5 @@
 # Two stages, like a Go multi-stage build: compile with the full toolchain, then copy only what runs.
-# Build for the Pi:  docker buildx build --platform linux/arm64 -t ghcr.io/harrisonwaffel/poker-tracker --push .
+# Build for the Pi:  docker buildx build --platform linux/arm64 -t ghcr.io/caffeinatedtoad/poker-bank --push .
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app

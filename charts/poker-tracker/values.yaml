@@ -2,7 +2,7 @@
 # Anything not here is fixed in the templates on purpose (see the comments there).
 
 image:
-  repository: ghcr.io/harrisonwaffel/poker-tracker
+  repository: ghcr.io/caffeinatedtoad/poker-bank
   # Empty means the chart's appVersion, so each chart release runs exactly the image published with it
   # (the release workflow pushes ghcr.io/...:<appVersion>). Set it only to try another build, e.g. `latest`.
   tag: ""
