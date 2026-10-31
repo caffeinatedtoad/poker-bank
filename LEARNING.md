@@ -163,3 +163,15 @@ The browser updates without a reload. That's Vite's hot module replacement.
 - Kubernetes: `replicas: 1` plus `strategy: Recreate`, because SQLite is a file on a single-node volume.
   Two pods writing it would be like two processes sharing a BoltDB file. Probes use TCP because every HTTP
   request without Pangolin's header is a 401.
+
+## Feature: cash out
+
+A good example of a change that cuts through every layer:
+
+- **Schema:** added `'cashout'` to the `kind` enum in `schema.ts`. `npm run db:generate` reported
+  "No schema changes". A Drizzle `enum` on a `text` column is a TypeScript-only constraint, so SQLite never sees it.
+- **Service:** `cashOut()` in `ledger.ts` appends `-amount`. Buy in $5 + $5, cash out $15: 500 + 500 − 1500 = −500.
+  A negative balance means the player is in the green. The first test in `ledger.test.ts` is exactly that scenario.
+- **Handler:** the `cashout` action in `g/[id]/+page.server.ts` follows the same four steps as every other action.
+- **UI:** a "Cash out" button opens `ConfirmDialog` with a Now / After preview built from `describeBalance()`
+  in `money.ts`, which is shared so every screen words balances the same way.

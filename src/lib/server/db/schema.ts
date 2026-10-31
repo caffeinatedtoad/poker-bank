@@ -33,7 +33,7 @@ export const entries = sqliteTable('entries', {
 		.notNull()
 		.references(() => players.id, { onDelete: 'cascade' }),
 	deltaCents: integer('delta_cents').notNull(),
-	kind: text('kind', { enum: ['buyin', 'clear', 'set'] }).notNull(),
+	kind: text('kind', { enum: ['buyin', 'cashout', 'clear', 'set'] }).notNull(),
 	byEmail: text('by_email').notNull(),
 	createdAt: createdAt()
 });

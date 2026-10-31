@@ -2,7 +2,14 @@ import { error, fail } from '@sveltejs/kit';
 import { db } from '#lib/server/db/index.ts';
 import * as forms from '#lib/server/forms.ts';
 import { getGroup, requireBank, setDefaultBuyin } from '#lib/server/groups.ts';
-import { addPlayer, buyIn, listPlayers, moveTo, removePlayer } from '#lib/server/ledger.ts';
+import {
+	addPlayer,
+	buyIn,
+	cashOut,
+	listPlayers,
+	moveTo,
+	removePlayer
+} from '#lib/server/ledger.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 /** The `[id]` path segment as a positive integer, or a 404. Like strconv.Atoi on r.PathValue("id"). */
@@ -36,6 +43,16 @@ export const actions: Actions = {
 		if (!playerId) return badPlayer();
 		if (!amount) return fail(400, { error: 'Enter a buy-in amount above zero, like 20.' });
 		buyIn(db, group.id, playerId, amount, locals.user);
+	},
+
+	cashout: async ({ params, locals, request }) => {
+		const group = bankGroup(params, locals.user);
+		const form = await request.formData();
+		const playerId = forms.id(form, 'playerId');
+		const amount = forms.cents(form, 'amount', { positive: true });
+		if (!playerId) return badPlayer();
+		if (!amount) return fail(400, { error: 'Enter what they ended with, like 15.' });
+		cashOut(db, group.id, playerId, amount, locals.user);
 	},
 
 	clear: async ({ params, locals, request }) => {

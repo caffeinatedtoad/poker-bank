@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { refreshAll } from '$app/navigation';
-	import { formatCents, parseCents, toInputValue } from '#lib/money.ts';
+	import { describeBalance, formatCents, parseCents, toInputValue } from '#lib/money.ts';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import type { PageProps } from './$types';
 
@@ -22,10 +22,14 @@
 
 	// Which row's extra actions are showing, and which confirmation is open (if any).
 	let expanded = $state<number | null>(null);
-	let pending = $state<{ kind: 'clear' | 'set' | 'remove'; playerId: number } | null>(null);
+	type ConfirmKind = 'cashout' | 'clear' | 'set' | 'remove';
+	let pending = $state<{ kind: ConfirmKind; playerId: number } | null>(null);
 	let pendingPlayer = $derived(data.players.find((p) => p.id === pending?.playerId));
 	let setValue = $state('');
 	let setCents = $derived(parseCents(setValue));
+	let cashoutValue = $state('');
+	let cashoutCents = $derived(parseCents(cashoutValue));
+	let cashoutValid = $derived(cashoutCents !== null && cashoutCents > 0);
 
 	// Poll for other people's changes: re-run load() every 5s while the tab is visible.
 	// $effect runs in the browser only; the function it returns is cleanup, like a deferred ticker.Stop().
@@ -36,8 +40,9 @@
 		return () => clearInterval(timer);
 	});
 
-	function confirm(kind: 'clear' | 'set' | 'remove', player: { id: number; balanceCents: number }) {
+	function confirm(kind: ConfirmKind, player: { id: number; balanceCents: number }) {
 		setValue = toInputValue(player.balanceCents);
+		cashoutValue = '';
 		expanded = null;
 		pending = { kind, playerId: player.id };
 	}
@@ -51,8 +56,10 @@
 </p>
 
 <p class="mt-6 flex items-baseline justify-between gap-4 border-b-2 border-base-content pb-2">
-	<span class="text-lg">Owed to the bank</span>
-	<span class="font-display text-5xl font-extrabold tabular-nums">{formatCents(total)}</span>
+	<span class="text-lg">{total < 0 ? 'The bank owes' : 'Owed to the bank'}</span>
+	<span class="font-display text-5xl font-extrabold tabular-nums"
+		>{formatCents(Math.abs(total))}</span
+	>
 </p>
 
 {#if form?.error}
@@ -94,9 +101,9 @@
 							class="font-display text-2xl font-semibold tabular-nums"
 							class:text-primary={player.balanceCents < 0}
 						>
-							{formatCents(player.balanceCents)}
+							{formatCents(Math.abs(player.balanceCents))}
 							{#if player.balanceCents < 0}<span class="font-sans text-sm font-normal">
-									bank owes</span
+									in the green</span
 								>{/if}
 						</p>
 					</div>
@@ -135,6 +142,9 @@
 
 				{#if isBank && expanded === player.id}
 					<div class="flex flex-wrap gap-2 pb-1">
+						<button class="btn btn-primary btn-sm" onclick={() => confirm('cashout', player)}
+							>Cash out</button
+						>
 						<button class="btn btn-sm" onclick={() => confirm('set', player)}>Set amount</button>
 						<button
 							class="btn btn-sm"
@@ -165,7 +175,38 @@
 <!-- One dialog, mounted only while a confirmation is pending. -->
 {#if pending && pendingPlayer}
 	{@const p = pendingPlayer}
-	{#if pending.kind === 'clear'}
+	{#if pending.kind === 'cashout'}
+		<ConfirmDialog
+			title="Cash out {p.name}"
+			action="?/cashout"
+			confirmLabel={cashoutValid ? `Cash out ${formatCents(cashoutCents!)}` : 'Cash out'}
+			disabled={!cashoutValid}
+			onclose={() => (pending = null)}
+		>
+			<input type="hidden" name="playerId" value={p.id} />
+			<label class="grid gap-1">
+				<span>What {p.name} ended the night with ($)</span>
+				<input
+					name="amount"
+					bind:value={cashoutValue}
+					inputmode="decimal"
+					placeholder="15"
+					class="input w-full font-display text-2xl font-bold tabular-nums"
+				/>
+			</label>
+			<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-lg">
+				<dt>Now</dt>
+				<dd class="tabular-nums">{describeBalance(p.balanceCents)}</dd>
+				<dt>After</dt>
+				<dd
+					class="font-bold tabular-nums"
+					class:text-primary={cashoutValid && p.balanceCents - cashoutCents! < 0}
+				>
+					{cashoutValid ? describeBalance(p.balanceCents - cashoutCents!) : '—'}
+				</dd>
+			</dl>
+		</ConfirmDialog>
+	{:else if pending.kind === 'clear'}
 		<ConfirmDialog
 			title="Clear {p.name}?"
 			action="?/clear"
@@ -188,7 +229,7 @@
 		>
 			<input type="hidden" name="playerId" value={p.id} />
 			<label class="grid gap-1">
-				<span>New amount owed ($). Use a minus sign if the bank owes them.</span>
+				<span>New amount owed ($). Use a minus sign for money in the green.</span>
 				<input
 					name="value"
 					bind:value={setValue}

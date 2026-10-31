@@ -33,6 +33,21 @@ export function buyIn(db: DB, groupId: number, playerId: number, cents: number, 
 }
 
 /**
+ * Credits the chips a player ended the night with. Bought in $10 and cashing out $15
+ * leaves a balance of -$5, meaning the player is $5 in the green.
+ */
+export function cashOut(
+	db: DB,
+	groupId: number,
+	playerId: number,
+	cents: number,
+	by: string
+): void {
+	requirePlayer(db, groupId, playerId);
+	db.insert(entries).values({ playerId, deltaCents: -cents, kind: 'cashout', byEmail: by }).run();
+}
+
+/**
  * Sets the player's balance to exactly `targetCents` by appending the difference,
  * so the history is kept. Read and write happen in one transaction so a concurrent
  * buy-in can't slip in between and get lost.
