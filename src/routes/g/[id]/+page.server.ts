@@ -1,33 +1,26 @@
-import { error, fail } from '@sveltejs/kit';
+import { fail } from '@sveltejs/kit';
 import { db } from '#lib/server/db/index.ts';
 import * as forms from '#lib/server/forms.ts';
-import { getGroup, requireBank, setDefaultBuyin } from '#lib/server/groups.ts';
+import { getGroupFromParam, requireBank, setDefaultBuyin } from '#lib/server/groups.ts';
 import {
 	addPlayer,
 	buyIn,
 	cashOut,
 	listPlayers,
 	moveTo,
-	removePlayer,
-	undoBuyIn
+	removeBuyIn,
+	removePlayer
 } from '#lib/server/ledger.ts';
 import type { Actions, PageServerLoad } from './$types';
 
-/** The `[id]` path segment as a positive integer, or a 404. Like strconv.Atoi on r.PathValue("id"). */
-function groupIdFrom(params: { id: string }): number {
-	const id = Number(params.id);
-	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Group not found');
-	return id;
-}
-
 export const load: PageServerLoad = ({ params }) => {
-	const group = getGroup(db, groupIdFrom(params));
+	const group = getGroupFromParam(db, params.id);
 	return { group, players: listPlayers(db, group.id) };
 };
 
 /** Loads the group and throws 403 unless the signed-in user is its bank. First line of every action. */
 function bankGroup(params: { id: string }, user: string) {
-	const group = getGroup(db, groupIdFrom(params));
+	const group = getGroupFromParam(db, params.id);
 	requireBank(group, user);
 	return group;
 }
@@ -47,11 +40,12 @@ export const actions: Actions = {
 		return { entryId: buyIn(db, group.id, playerId, amount, locals.user) };
 	},
 
-	undo: async ({ params, locals, request }) => {
+	removeBuyIn: async ({ params, locals, request }) => {
 		const group = bankGroup(params, locals.user);
 		const entryId = forms.id(await request.formData(), 'entryId');
-		if (!entryId) return fail(400, { error: 'Nothing to undo.' });
-		undoBuyIn(db, group.id, entryId);
+		if (!entryId)
+			return fail(400, { error: 'That buy-in is missing from the form. Reload and try again.' });
+		removeBuyIn(db, group.id, entryId);
 	},
 
 	cashout: async ({ params, locals, request }) => {

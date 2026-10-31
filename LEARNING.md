@@ -191,8 +191,9 @@ Phone browsers have quirks that desktop testing never shows. The ones this app h
 - **Notch and home indicator:** `viewport-fit=cover` in `app.html` plus the `safe-x`, `safe-top` and
   `safe-bottom` classes, which pad with `env(safe-area-inset-*)`.
 - **Thumb zone:** the bottom third of the screen is easiest to reach. The buy-in bar and action sheets live there.
-- **Undo instead of confirm** for the frequent, reversible action (a chip tap): a 6-second Undo toast, plus
-  ⋯ → "Remove last buy-in" for mistakes noticed later. Confirmation dialogs are kept for
+- **Accidental buy-ins:** every chip tap opens a quick confirmation sheet (Now / After, big **Add $20** button in
+  thumb reach), then a 6-second Undo toast. Anything that still slips through can be removed from the player's
+  history in their ⋯ sheet. Confirmation dialogs are kept for
   rare or destructive actions. That follows Baymard's research on accidental taps.
 - **Add to Home Screen:** `static/manifest.webmanifest` plus `apple-touch-icon.png` make it open full screen
   with the chip icon. iOS 26 colours its toolbars from the `body` background, so `app.html` sets one explicitly.
@@ -200,9 +201,13 @@ Phone browsers have quirks that desktop testing never shows. The ones this app h
 Svelte features introduced here: `{#snippet}` / `{@render}` (a reusable template block, like `{{define}}`/`{{template}}`
 in Go) and `requestSubmit()`, which submits a form from code while keeping `use:enhance`.
 
-### Removing the last buy-in
+### Player history and removing buy-ins
 
-`undoBuyIn()` in `ledger.ts` only deletes a buy-in that is still the player's **latest** entry (the
-`isLatestEntry` SQL fragment, a correlated subquery). Without that rule, removing a buy-in from before a
-cash-out would quietly change the night's result. `listPlayers()` returns `lastBuyIn` when it can be removed,
-so the page only offers the option when the server will accept it. The server still checks on its own.
+- The ⋯ sheet fetches `GET /g/{id}/history/{playerId}`, a JSON endpoint in
+  `src/routes/g/[id]/history/[playerId]/+server.ts`. A `+server.ts` exports functions named after HTTP methods,
+  like registering an `http.HandlerFunc`, and `json(...)` is `json.NewEncoder(w).Encode(...)`. Fetching on demand
+  keeps the history out of the 5-second refresh.
+- `removeBuyIn()` in `ledger.ts` deletes **any** buy-in in the group, however old. Because the balance is a
+  `SUM` over the ledger, deleting one entry lowers the balance by exactly that amount, and later cash-outs or sets
+  stay as they were. That's what lets several mis-taps be fully undone even after a cash-out
+  (see the "removes several mis-taps" test).

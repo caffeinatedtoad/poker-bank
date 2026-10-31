@@ -1,4 +1,6 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
+
 	// A list of actions rising from the bottom of the screen, within thumb reach. Choosing one calls its
 	// `onselect`. The parent then swaps this sheet for that action's ConfirmDialog.
 	interface Option {
@@ -12,8 +14,10 @@
 		subtitle: string;
 		options: Option[];
 		onclose: () => void;
+		/** Optional content between the heading and the actions (the player's history). */
+		children?: Snippet;
 	}
-	let { title, subtitle, options, onclose }: Props = $props();
+	let { title, subtitle, options, onclose, children }: Props = $props();
 
 	let dialog: HTMLDialogElement;
 	$effect(() => dialog.showModal());
@@ -27,6 +31,7 @@
 			<h2 class="font-display text-3xl font-bold break-words">{title}</h2>
 			<p class="font-display text-xl tabular-nums opacity-80">{subtitle}</p>
 		</div>
+		{@render children?.()}
 		{#each options as option (option.label)}
 			<button
 				class="btn h-14 text-base {option.tone ? toneClass[option.tone] : ''}"

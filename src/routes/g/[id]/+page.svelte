@@ -30,8 +30,8 @@
 		if (next > 0) amount = toInputValue(next);
 	}
 
-	// Which sheet or confirmation is open, if any. 'menu' is the ⋯ action sheet for a player.
-	type PlayerSheet = 'menu' | 'cashout' | 'set' | 'clear' | 'remove';
+	// Which sheet or confirmation is open, if any. 'menu' is the ⋯ sheet (history and actions) for a player.
+	type PlayerSheet = 'buyin' | 'menu' | 'cashout' | 'set' | 'clear' | 'remove';
 	let pending = $state<{ kind: PlayerSheet; playerId: number } | { kind: 'amount' } | null>(null);
 	let pendingPlayerId = $derived(pending && 'playerId' in pending ? pending.playerId : null);
 	let pendingPlayer = $derived(data.players.find((p) => p.id === pendingPlayerId));
@@ -51,6 +51,45 @@
 		setValue = toInputValue(player.balanceCents);
 		cashoutValue = '';
 		pending = { kind, playerId: player.id };
+		if (kind === 'menu') loadHistory(player.id);
+	}
+
+	// A player's history is fetched from the JSON endpoint in history/[playerId]/+server.ts when
+	// their sheet opens, rather than sent with every 5-second refresh.
+	type HistoryEntry = {
+		id: number;
+		kind: 'buyin' | 'cashout' | 'clear' | 'set';
+		deltaCents: number;
+		createdAt: string;
+	};
+	let history = $state<HistoryEntry[] | null>(null);
+	let historyFailed = $state(false);
+
+	async function loadHistory(playerId: number) {
+		history = null;
+		historyFailed = false;
+		const res = await fetch(`/g/${data.group.id}/history/${playerId}`);
+		if (res.ok) history = await res.json();
+		else historyFailed = true;
+	}
+
+	const KIND_LABEL = { buyin: 'Buy-in', cashout: 'Cash out', clear: 'Cleared', set: 'Set' };
+
+	function signed(cents: number) {
+		return cents < 0 ? `−${formatCents(-cents)}` : `+${formatCents(cents)}`;
+	}
+
+	/** "9:42 PM" today, "Fri 9:42 PM" this past week, "Oct 3" before that, in the viewer's time zone. */
+	function when(iso: string) {
+		const date = new Date(iso);
+		const time = { hour: 'numeric', minute: '2-digit' } as const;
+		if (date.toDateString() === new Date().toDateString())
+			return date.toLocaleTimeString(undefined, time);
+		const recent = Date.now() - date.getTime() < 6 * 24 * 60 * 60 * 1000;
+		return date.toLocaleString(
+			undefined,
+			recent ? { weekday: 'short', ...time } : { month: 'short', day: 'numeric' }
+		);
 	}
 
 	function openAmount() {
@@ -65,11 +104,10 @@
 		if (makeDefault) queueMicrotask(() => defaultForm?.requestSubmit());
 	}
 
-	// One-tap buy-ins have no confirmation, so each one offers Undo for a few seconds instead.
-	// A later mis-tap can still be removed from the player's ⋯ sheet ("Remove last buy-in").
+	// Every buy-in is confirmed first, then offers Undo for a few seconds. Anything that still slips
+	// through can be removed from the player's history in their ⋯ sheet.
 	let toast = $state<{ text: string; undoEntryId?: number } | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout>;
-	let busyPlayer = $state<number | null>(null);
 
 	function showToast(text: string, undoEntryId?: number) {
 		clearTimeout(toastTimer);
@@ -77,36 +115,11 @@
 		toastTimer = setTimeout(() => (toast = null), 6000);
 	}
 
-	// "Remove last buy-in" posts this hidden form with the entry to delete.
-	let removeForm = $state<HTMLFormElement>();
-	let removing = $state<{ entryId: number; text: string } | null>(null);
-
-	function removeLastBuyIn(player: {
-		name: string;
-		lastBuyIn: { entryId: number; cents: number } | null;
-	}) {
-		if (!player.lastBuyIn) return;
-		removing = {
-			entryId: player.lastBuyIn.entryId,
-			text: `Removed ${formatCents(player.lastBuyIn.cents)} buy-in from ${player.name}`
-		};
-		pending = null;
-		queueMicrotask(() => removeForm?.requestSubmit());
-	}
-
-	function buyinSubmit(player: { id: number; name: string }) {
-		const cents = amountCents!;
-		return () => {
-			busyPlayer = player.id;
-			navigator.vibrate?.(10); // a light tick on Android; iPhones ignore it
-			return async ({ result, update }: { result: any; update: () => Promise<void> }) => {
-				busyPlayer = null;
-				await update();
-				if (result.type === 'success' && result.data?.entryId) {
-					showToast(`Added ${formatCents(cents)} to ${player.name}`, result.data.entryId);
-				}
-			};
-		};
+	function buyInAdded(player: { name: string }, cents: number, result?: Record<string, unknown>) {
+		navigator.vibrate?.(10); // a light tick on Android; iPhones ignore it
+		if (typeof result?.entryId === 'number') {
+			showToast(`Added ${formatCents(cents)} to ${player.name}`, result.entryId);
+		}
 	}
 
 	// Poll for other people's changes: re-run load() every 5s while the tab is visible.
@@ -170,21 +183,17 @@
 							</p>
 							<p class="text-2xl">{@render balance(player.balanceCents, 'start')}</p>
 						</div>
-						<form method="POST" action="?/buyin" use:enhance={buyinSubmit(player)}>
-							<input type="hidden" name="playerId" value={player.id} />
-							<input type="hidden" name="amount" value={amount} />
-							<button
-								class="chip"
-								data-size={chipLabel.length > 7 ? 'sm' : chipLabel.length > 5 ? 'md' : undefined}
-								disabled={!amountValid}
-								aria-busy={busyPlayer === player.id}
-								aria-label="Buy in {player.name} for {amountValid
-									? formatCents(amountCents!)
-									: 'an invalid amount'}"
-							>
-								{chipLabel}
-							</button>
-						</form>
+						<button
+							class="chip"
+							data-size={chipLabel.length > 7 ? 'sm' : chipLabel.length > 5 ? 'md' : undefined}
+							disabled={!amountValid}
+							aria-label="Buy in {player.name} for {amountValid
+								? formatCents(amountCents!)
+								: 'an invalid amount'}"
+							onclick={() => open('buyin', player)}
+						>
+							{chipLabel}
+						</button>
 						<button
 							class="btn btn-square size-12 btn-ghost"
 							aria-label="More for {player.name}"
@@ -235,22 +244,6 @@
 		<input type="hidden" name="amount" value={amount} />
 	</form>
 
-	<form
-		method="POST"
-		action="?/undo"
-		hidden
-		bind:this={removeForm}
-		use:enhance={() => {
-			const text = removing?.text;
-			return async ({ result, update }) => {
-				await update(); // on failure this shows the server's error message at the top
-				if (result.type === 'success' && text) showToast(text);
-			};
-		}}
-	>
-		<input type="hidden" name="entryId" value={removing?.entryId ?? ''} />
-	</form>
-
 	{#if toast}
 		<div
 			role="status"
@@ -264,7 +257,7 @@
 				{#if toast.undoEntryId}
 					<form
 						method="POST"
-						action="?/undo"
+						action="?/removeBuyIn"
 						use:enhance={() => {
 							toast = null;
 							return async ({ update }) => update();
@@ -345,15 +338,7 @@
 			subtitle={describeBalance(p.balanceCents)}
 			onclose={() => (pending = null)}
 			options={[
-				...(p.lastBuyIn
-					? [
-							{
-								label: `Remove last buy-in (+${formatCents(p.lastBuyIn.cents)})`,
-								onselect: () => removeLastBuyIn(p)
-							}
-						]
-					: []),
-				{ label: 'Cash out', tone: 'primary' as const, onselect: () => open('cashout', p) },
+				{ label: 'Cash out', tone: 'primary', onselect: () => open('cashout', p) },
 				{ label: 'Set amount', onselect: () => open('set', p) },
 				{
 					label: 'Clear balance',
@@ -362,7 +347,90 @@
 				},
 				{ label: 'Remove player', tone: 'danger', onselect: () => open('remove', p) }
 			]}
-		/>
+		>
+			<section aria-label="History" class="mb-2 max-h-64 overflow-y-auto border-y border-base-300">
+				{#if historyFailed}
+					<p class="py-3 text-error">Couldn't load the history. Close this and try again.</p>
+				{:else if history === null}
+					<p class="py-3 opacity-75">Loading history…</p>
+				{:else if history.length === 0}
+					<p class="py-3 opacity-75">No buy-ins yet.</p>
+				{:else}
+					<ul class="divide-y divide-base-300">
+						{#each history as entry (entry.id)}
+							<li class="flex min-h-12 items-center gap-3">
+								<span class="min-w-0 flex-1 py-1">
+									<span class="block">{KIND_LABEL[entry.kind]}</span>
+									<span class="block text-sm opacity-75">{when(entry.createdAt)}</span>
+								</span>
+								<span class="font-display text-xl tabular-nums">{signed(entry.deltaCents)}</span>
+								{#if entry.kind === 'buyin'}
+									<form
+										method="POST"
+										action="?/removeBuyIn"
+										use:enhance={() => {
+											const text = `Removed ${formatCents(entry.deltaCents)} buy-in from ${p.name}`;
+											return async ({ result, update }) => {
+												await update();
+												if (result.type === 'success') {
+													showToast(text);
+													loadHistory(p.id);
+												}
+											};
+										}}
+									>
+										<input type="hidden" name="entryId" value={entry.id} />
+										<button
+											class="btn btn-square size-11 btn-ghost text-error"
+											aria-label="Remove the {formatCents(entry.deltaCents)} buy-in from {when(
+												entry.createdAt
+											)}"
+										>
+											<svg
+												viewBox="0 0 24 24"
+												class="size-5"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												aria-hidden="true"
+											>
+												<path
+													d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												/>
+											</svg>
+										</button>
+									</form>
+								{:else}
+									<span class="size-11 shrink-0" aria-hidden="true"></span>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		</ActionSheet>
+	{:else if pending.kind === 'buyin'}
+		<ConfirmDialog
+			title="Buy in {p.name}?"
+			action="?/buyin"
+			confirmLabel={amountValid ? `Add ${formatCents(amountCents!)}` : 'Add'}
+			disabled={!amountValid}
+			onsuccess={(result) => buyInAdded(p, amountCents!, result)}
+			onclose={() => (pending = null)}
+		>
+			<input type="hidden" name="playerId" value={p.id} />
+			<input type="hidden" name="amount" value={amount} />
+			<dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1">
+				<dt>Now</dt>
+				<dd class="font-display text-2xl tabular-nums">{describeBalance(p.balanceCents)}</dd>
+				<dt>After</dt>
+				<dd class="font-display text-2xl font-bold tabular-nums">
+					{amountValid ? describeBalance(p.balanceCents + amountCents!) : '—'}
+				</dd>
+			</dl>
+		</ConfirmDialog>
 	{:else if pending.kind === 'cashout'}
 		<ConfirmDialog
 			title="Cash out {p.name}"

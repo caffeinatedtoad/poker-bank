@@ -36,6 +36,13 @@ export function getGroup(db: DB, id: number): Group {
 	return group;
 }
 
+/** The group named by a URL segment like the `12` in `/g/12`, or a 404. Like strconv.Atoi on r.PathValue. */
+export function getGroupFromParam(db: DB, param: string): Group {
+	const id = Number(param);
+	if (!Number.isSafeInteger(id) || id <= 0) error(404, 'Group not found');
+	return getGroup(db, id);
+}
+
 /** Throws 403 unless `user` is this group's bank. Call it at the top of every bank-only action. */
 export function requireBank(group: Group, user: string): void {
 	if (group.bankEmail !== user) error(403, 'Only the bank can do that');

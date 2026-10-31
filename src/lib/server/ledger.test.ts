@@ -10,7 +10,8 @@ import {
 	listPlayers,
 	moveTo,
 	removePlayer,
-	undoBuyIn
+	listEntries,
+	removeBuyIn
 } from './ledger';
 
 const BANK = 'bank@example.com';
@@ -59,48 +60,47 @@ describe('ledger', () => {
 		expect(balanceOf(db, alice)).toBe(800);
 	});
 
-	it('undoes a mistaken buy-in', () => {
+	it('removes a mistaken buy-in', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		const oops = buyIn(db, groupId, alice, 2000, BANK);
-		undoBuyIn(db, groupId, oops);
+		removeBuyIn(db, groupId, oops);
 		expect(balanceOf(db, alice)).toBe(2000);
-		expect(thrownStatus(() => undoBuyIn(db, groupId, oops))).toBe(404); // already gone
+		expect(thrownStatus(() => removeBuyIn(db, groupId, oops))).toBe(404); // already gone
 	});
 
-	it('removes buy-ins one at a time, most recent first', () => {
-		const lastBuyIn = () => listPlayers(db, groupId)[0].lastBuyIn;
-		const first = buyIn(db, groupId, alice, 2000, BANK);
-		const second = buyIn(db, groupId, alice, 500, BANK);
-		expect(lastBuyIn()).toEqual({ entryId: second, cents: 500 });
-		expect(thrownStatus(() => undoBuyIn(db, groupId, first))).toBe(404); // not the latest yet
-		undoBuyIn(db, groupId, second);
-		expect(lastBuyIn()).toEqual({ entryId: first, cents: 2000 });
-		undoBuyIn(db, groupId, first);
-		expect(lastBuyIn()).toBeNull();
-		expect(balanceOf(db, alice)).toBe(0);
+	it('removes several mis-taps in any order, even after a cash-out', () => {
+		const real = buyIn(db, groupId, alice, 2000, BANK);
+		const oops1 = buyIn(db, groupId, alice, 2000, BANK);
+		const oops2 = buyIn(db, groupId, alice, 2000, BANK);
+		cashOut(db, groupId, alice, 3000, BANK); // ended with $30 after a real $20 buy-in
+		removeBuyIn(db, groupId, oops1);
+		removeBuyIn(db, groupId, oops2);
+		expect(balanceOf(db, alice)).toBe(-1000); // $10 in the green, as if the mis-taps never happened
+		expect(listEntries(db, groupId, alice).map((e) => e.id)).toContain(real);
 	});
 
-	it("won't remove a buy-in from before a cash-out", () => {
-		const buyin = buyIn(db, groupId, alice, 2000, BANK);
-		cashOut(db, groupId, alice, 3000, BANK);
-		expect(listPlayers(db, groupId)[0].lastBuyIn).toBeNull();
-		expect(thrownStatus(() => undoBuyIn(db, groupId, buyin))).toBe(404);
-		expect(balanceOf(db, alice)).toBe(-1000);
-	});
-
-	it('only undoes buy-ins, and only within the group', () => {
+	it('only removes buy-ins, and only within the group', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		cashOut(db, groupId, alice, 500, BANK);
-		const cashout = db
-			.select()
-			.from(entries)
-			.all()
-			.find((e) => e.kind === 'cashout')!.id;
-		expect(thrownStatus(() => undoBuyIn(db, groupId, cashout))).toBe(404);
+		const cashout = listEntries(db, groupId, alice).find((e) => e.kind === 'cashout')!.id;
+		expect(thrownStatus(() => removeBuyIn(db, groupId, cashout))).toBe(404);
 		const buyin = buyIn(db, groupId, alice, 100, BANK);
 		const other = createGroup(db, { name: 'Other', bankEmail: 'x@y.z', defaultBuyinCents: 500 });
-		expect(thrownStatus(() => undoBuyIn(db, other, buyin))).toBe(404);
+		expect(thrownStatus(() => removeBuyIn(db, other, buyin))).toBe(404);
 		expect(balanceOf(db, alice)).toBe(1600);
+	});
+
+	it("lists a player's history newest first, scoped to the group", () => {
+		buyIn(db, groupId, alice, 2000, BANK);
+		cashOut(db, groupId, alice, 500, BANK);
+		moveTo(db, groupId, alice, 0, 'clear', BANK);
+		expect(listEntries(db, groupId, alice).map((e) => [e.kind, e.deltaCents])).toEqual([
+			['clear', -1500],
+			['cashout', -500],
+			['buyin', 2000]
+		]);
+		const other = createGroup(db, { name: 'Other', bankEmail: 'x@y.z', defaultBuyinCents: 500 });
+		expect(thrownStatus(() => listEntries(db, other, alice))).toBe(404);
 	});
 
 	it('clears to zero without deleting history', () => {
@@ -136,11 +136,11 @@ describe('ledger', () => {
 	it('lists players with balances, sorted by name', () => {
 		const bob = addPlayer(db, groupId, 'Bob');
 		addPlayer(db, groupId, 'Aaron');
-		const entryId = buyIn(db, groupId, bob, 2000, BANK);
+		buyIn(db, groupId, bob, 2000, BANK);
 		expect(listPlayers(db, groupId)).toEqual([
-			{ id: expect.any(Number), name: 'Aaron', balanceCents: 0, lastBuyIn: null },
-			{ id: alice, name: 'Alice', balanceCents: 0, lastBuyIn: null },
-			{ id: bob, name: 'Bob', balanceCents: 2000, lastBuyIn: { entryId, cents: 2000 } }
+			{ id: expect.any(Number), name: 'Aaron', balanceCents: 0 },
+			{ id: alice, name: 'Alice', balanceCents: 0 },
+			{ id: bob, name: 'Bob', balanceCents: 2000 }
 		]);
 	});
 

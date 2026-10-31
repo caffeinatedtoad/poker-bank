@@ -8,6 +8,8 @@
 		/** The form action to post to, e.g. "?/clear". Omit it and pass `onconfirm` for a browser-only choice. */
 		action?: string;
 		onconfirm?: () => void;
+		/** Called with the action's returned data after the server accepts it. */
+		onsuccess?: (data: Record<string, unknown> | undefined) => void;
 		confirmLabel: string;
 		danger?: boolean;
 		disabled?: boolean;
@@ -25,6 +27,7 @@
 		title,
 		action,
 		onconfirm,
+		onsuccess,
 		confirmLabel,
 		danger = false,
 		disabled = false,
@@ -72,8 +75,9 @@
 			class="modal-box grid gap-4"
 			use:enhance={() => {
 				submitting = true;
-				return async ({ update }) => {
+				return async ({ result, update }) => {
 					await update(); // apply the action result and re-run load(), as plain use:enhance would
+					if (result.type === 'success') onsuccess?.(result.data);
 					dialog.close();
 				};
 			}}
