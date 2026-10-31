@@ -246,3 +246,18 @@ its output. `.Values` comes from `values.yaml` plus any `--set` flags, and `.Cha
   non-root) are fixed in the templates, so nobody can `--set` their way into two pods writing one SQLite file.
 - The PVC has `helm.sh/resource-policy: keep`, so `helm uninstall` never deletes the data.
 - The image tag defaults to `appVersion` from `Chart.yaml`. A chart version always runs the image built for it.
+
+## Release workflow (`.github/workflows/release.yml`)
+
+Three jobs, chained with `needs:` like a small pipeline: `test` → `image` → `chart`. Each job declares only the
+token permissions it uses (`packages: write` to push images, `contents: write` to publish releases and `gh-pages`).
+
+- **Versions drive releases, not pushes.** The image job skips if `ghcr.io/...:<appVersion>` already exists, and
+  chart-releaser skips chart versions it has already released. Pushing code without bumping `Chart.yaml` runs
+  the tests and publishes nothing, much like a Go module where nothing ships until you tag a version.
+- **The chart pins its image.** The chart's default image tag is its `appVersion`, so `helm install` of chart
+  0.2.0 always runs the image built for 0.2.0. Published tags are never overwritten, which keeps that true.
+- **The `gh-pages` branch is a static Helm repo.** chart-releaser writes `index.yaml` there, listing every chart
+  version and its download URL (the `.tgz` attached to a GitHub release). `helm repo add` just fetches that file.
+- **arm64 on x86 runners:** QEMU emulation (`setup-qemu-action`) lets buildx build the Pi's arm64 image on
+  GitHub's x86 machines. That's slow, but nothing compiles natively here, so it's just `npm ci` and `vite build`.

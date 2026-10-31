@@ -1,0 +1,116 @@
+# Publishes on every push to main, but only what's new:
+#   test   unit tests, type-check and chart lint. Nothing is published if these fail.
+#   image  builds ghcr.io/<owner>/<repo>:<appVersion> (and :latest) for arm64 + amd64, unless that tag exists.
+#   chart  packages the chart if its `version` hasn't been released yet, attaches it to a GitHub release, and
+#          updates index.yaml on the gh-pages branch, which GitHub Pages serves as a Helm repository.
+#
+# To release: bump `version` in charts/poker-tracker/Chart.yaml (and `appVersion` too when the app changed),
+# commit, push. A push that changes neither publishes nothing new.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One release at a time, and never cancel one halfway through publishing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install -g npm@11 # npm 10 crashes resolving this dependency tree (see README)
+      - run: npm ci --ignore-scripts # same as the Dockerfile: better-sqlite3 ships prebuilt binaries
+      - run: npm test
+      - run: npm run check
+      - uses: azure/setup-helm@v5
+      - run: helm lint charts/poker-tracker
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the workflow's own token
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read appVersion from Chart.yaml
+        id: meta
+        run: |
+          version=$(sed -n "s/^appVersion: *[\"']\{0,1\}\([^\"' ]*\)[\"']\{0,1\} *$/\1/p" charts/poker-tracker/Chart.yaml)
+          test -n "$version" || { echo "::error::No appVersion in charts/poker-tracker/Chart.yaml"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT" # GHCR names must be lowercase
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-qemu-action@v4 # emulates arm64 so the x86 runner can build the Pi's image
+      - uses: docker/setup-buildx-action@v4
+
+      # Published tags are never overwritten: a chart version must always mean the same image.
+      - name: Skip if this version is already published
+        id: check
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:$VERSION" > /dev/null 2>&1; then
+            echo "$IMAGE:$VERSION already exists; bump appVersion to publish a new image."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.publish == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64,linux/amd64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:latest
+          # Links the package to this repo on GitHub, so it shows on the repo page and can inherit access.
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  chart:
+    needs: image # the chart points at the image, so publish the image first
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release and push index.yaml to gh-pages
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # chart-releaser compares against earlier release tags
+          persist-credentials: true # it pushes gh-pages through a git worktree using these credentials
+
+      - name: Configure git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - uses: azure/setup-helm@v5
+
+      - uses: helm/chart-releaser-action@v1.9.0
+        with:
+          skip_existing: true # a version that's already released is left alone
+        env:
+          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
