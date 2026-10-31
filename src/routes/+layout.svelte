@@ -3,7 +3,7 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import type { LayoutProps } from './$types';
 
-	let { children }: LayoutProps = $props();
+	let { data, children }: LayoutProps = $props();
 </script>
 
 <svelte:head>
@@ -13,6 +13,7 @@
 <div class="mx-auto min-h-dvh max-w-xl px-4 pt-4 pb-12">
 	<header class="mb-6 flex items-center justify-between gap-4">
 		<a href="/" class="font-display text-xl font-bold text-primary">Poker Tracker</a>
+		<span class="truncate text-sm opacity-75">{data.user}</span>
 	</header>
 	<main>
 		{@render children()}

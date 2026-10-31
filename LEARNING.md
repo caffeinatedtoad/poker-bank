@@ -89,3 +89,15 @@ The browser updates without a reload. That's Vite's hot module replacement.
 - Styling: Tailwind utility classes in the markup (`flex`, `gap-4`, `text-3xl`) instead of a separate CSS file.
   The theme colors (`text-primary`, `bg-base-200`) come from the DaisyUI themes in `layout.css`, which switch
   between light (`cardroom`) and dark (`felt`) automatically.
+
+## Step 5: auth middleware
+
+- `src/hooks.server.ts` `handle()` runs before every request, like wrapping your mux in middleware.
+  Returning a `Response` early is `http.Error(w, ...); return`, and `resolve(event)` is `next.ServeHTTP(w, r)`.
+- `event.locals` is per-request storage, like `context.WithValue`. Its shape is declared once in
+  `src/app.d.ts` (`App.Locals`), so `locals.user` is typed everywhere without casts.
+- `+layout.server.ts` loads data for **every** page under it. That's how the header shows the user.
+- There's no login code: Pangolin does SSO and forwards the email header. That makes the header a security
+  boundary. Anyone who can reach the pod directly could forge it, so the Service must stay internal.
+- `DEV_USER` only works under `npm run dev` (`dev` from `$app/env`). Try it as someone else:
+  `curl -H 'remote-email: sam@example.com' localhost:5173`.
