@@ -1,0 +1,17 @@
+# ClusterIP only, and deliberately not configurable: the app trusts Pangolin's identity header, so it
+# must never be reachable directly from the LAN or internet. Pangolin (its Newt connector in the cluster)
+# is the only way in.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "poker-tracker.fullname" . }}
+  labels:
+    {{- include "poker-tracker.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "poker-tracker.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

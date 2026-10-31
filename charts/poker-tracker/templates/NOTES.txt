@@ -1,0 +1,17 @@
+Poker Tracker is installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+1. Point Pangolin at this address (from inside the cluster), with SSO turned on:
+
+     http://{{ include "poker-tracker.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+2. Open the app through Pangolin. Your email should appear in the top right. If you see
+   'Not signed in: missing the "{{ .Values.auth.emailHeader }}" header', set the header your Pangolin sends:
+
+     helm upgrade {{ .Release.Name }} <chart> -n {{ .Release.Namespace }} --reuse-values --set auth.emailHeader=<header>
+
+3. To upgrade after a new release (this one runs image tag {{ .Values.image.tag | default .Chart.AppVersion }}):
+
+     helm repo update && helm upgrade {{ .Release.Name }} <chart> -n {{ .Release.Namespace }} --reuse-values
+
+The data volume ({{ include "poker-tracker.fullname" . }}-data) is kept on `helm uninstall`.
+Never expose this Service outside the cluster: it trusts the identity header from Pangolin.

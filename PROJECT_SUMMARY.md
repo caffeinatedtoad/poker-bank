@@ -33,7 +33,7 @@ An attractive web app to track poker totals for a friend group.
 
 Iteration 1 is built (October 31, 2026). Banks create groups, add and remove players, record buy-ins
 (prefilled, editable amount), and clear or set balances behind confirmation dialogs. Everyone signed in can
-view every group, and pages refresh every 5 seconds. There's an arm64 image plus k8s manifests. Not yet deployed.
+view every group, and pages refresh every 5 seconds. There's an arm64 image plus a Helm chart (`charts/poker-tracker`). Not yet deployed.
 
 See `README.md` to run and deploy, and `LEARNING.md` for a SvelteKit-for-Go-developers guide to the code.
 

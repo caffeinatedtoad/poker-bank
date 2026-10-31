@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "poker-tracker.fullname" . }}
+  labels:
+    {{- include "poker-tracker.labels" . | nindent 4 }}
+spec:
+  # Fixed, not a value: SQLite on a ReadWriteOnce volume allows exactly one pod, and the old pod must
+  # stop before the new one starts (Recreate), or two writers would share one database file.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "poker-tracker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "poker-tracker.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # the `node` user in the image
+        fsGroup: 1000 # makes the mounted volume writable by that user
+      containers:
+        - name: poker-tracker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: AUTH_EMAIL_HEADER
+              value: {{ .Values.auth.emailHeader | quote }}
+            # DATABASE_URL (/data/poker.db) and PORT come from the image.
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # TCP, not HTTP: every HTTP request without Pangolin's header gets a 401.
+          readinessProbe:
+            tcpSocket:
+              port: http
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "poker-tracker.fullname" . }}-data

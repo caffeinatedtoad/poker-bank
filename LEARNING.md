@@ -232,3 +232,17 @@ A hand-written SVG step chart in the player's ⋯ sheet, with no chart library. 
 - **Motion:** `pathLength="1"` normalises the path length, so animating `stroke-dashoffset` from 1 to 0 "draws" the
   line. It's off when the phone asks for reduced motion.
 - **A real bug the tests caught:** `-0` in JavaScript can format as "-$0". `0 - balance` avoids it.
+
+## Helm chart (`charts/poker-tracker`)
+
+Helm templates **are Go `text/template`**, with extra functions from the Sprig library, so the syntax is familiar:
+`{{ .Values.image.repository }}` is a field lookup on the data passed in, `{{- ... -}}` trims whitespace, and
+`{{ include "poker-tracker.labels" . | nindent 4 }}` calls a named template (defined in `_helpers.tpl`) and indents
+its output. `.Values` comes from `values.yaml` plus any `--set` flags, and `.Chart` from `Chart.yaml`.
+
+- `helm template poker-tracker charts/poker-tracker` renders the YAML without touching a cluster. It's the quickest
+  way to see what a change does. `helm lint` catches template mistakes.
+- Only real settings are in `values.yaml`. Things that must not change (one replica, Recreate, ClusterIP-only,
+  non-root) are fixed in the templates, so nobody can `--set` their way into two pods writing one SQLite file.
+- The PVC has `helm.sh/resource-policy: keep`, so `helm uninstall` never deletes the data.
+- The image tag defaults to `appVersion` from `Chart.yaml`. A chart version always runs the image built for it.

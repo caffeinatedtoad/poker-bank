@@ -45,31 +45,41 @@ curl -H 'remote-email: sam@example.com' http://localhost:5173/
 
 ## Deploying to the Pi
 
+The Helm chart in `charts/poker-tracker` creates the Deployment, a ClusterIP Service and the data volume.
+Settings you might change are in `charts/poker-tracker/values.yaml`.
+
 1. **Build and push the arm64 image** (Docker with buildx, e.g. Rancher Desktop). Log in once with
-   `docker login ghcr.io` using a GitHub token that has `write:packages`.
+   `docker login ghcr.io` using a GitHub token that has `write:packages`. The tag must match the chart's
+   `appVersion` in `charts/poker-tracker/Chart.yaml`.
 
    ```sh
-   docker buildx build --platform linux/arm64 -t ghcr.io/harrisonwaffel/poker-tracker:latest --push .
+   docker buildx build --platform linux/arm64 -t ghcr.io/harrisonwaffel/poker-tracker:0.1.0 --push .
    ```
 
-   GHCR packages start private. Either make the package public in GitHub's package settings, or add an
-   `imagePullSecrets` entry to `k8s/deployment.yaml`.
+   GHCR packages start private. Either make the package public in GitHub's package settings, or create a pull
+   secret and pass it to the chart (`values.yaml` shows how, under `imagePullSecrets`).
 
-2. **Apply the manifests** (or import them in Rancher: _Import YAML_, pick a namespace):
+2. **Install the chart** (with your kubeconfig pointing at the Pi's cluster):
 
    ```sh
-   kubectl create namespace poker
-   kubectl apply -n poker -f k8s/
+   helm upgrade --install poker-tracker charts/poker-tracker -n poker --create-namespace
    ```
+
+   Run the same command again to apply changes. `helm template poker-tracker charts/poker-tracker` prints the
+   plain YAML if you want to see exactly what gets applied.
 
 3. **Expose it through Pangolin.** Add a resource pointing at `http://poker-tracker.poker.svc:80` (Newt must
    run inside the cluster to reach a ClusterIP Service) and turn on SSO for it.
 
 4. **Check the identity header.** Open the app through Pangolin. Your email should show in the top right.
-   If you get "Not signed in: missing the "remote-email" header", find the header your Pangolin version sends
-   and set `AUTH_EMAIL_HEADER` in `k8s/deployment.yaml`.
+   If you get "Not signed in: missing the "remote-email" header", find the header your Pangolin version sends:
 
-Redeploy after pushing a new image: `kubectl -n poker rollout restart deploy/poker-tracker`.
+   ```sh
+   helm upgrade poker-tracker charts/poker-tracker -n poker --reuse-values --set auth.emailHeader=<header>
+   ```
+
+`helm uninstall poker-tracker -n poker` removes the app but **keeps the data volume**
+(`poker-tracker-data`), and reinstalling picks it up again.
 
 ### Security model
 

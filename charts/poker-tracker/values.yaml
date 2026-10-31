@@ -1,0 +1,33 @@
+# Settings you can override with `--set key=value` or `-f my-values.yaml`.
+# Anything not here is fixed in the templates on purpose (see the comments there).
+
+image:
+  repository: ghcr.io/harrisonwaffel/poker-tracker
+  # Empty means the chart's appVersion, so each chart release runs exactly the image published with it
+  # (the release workflow pushes ghcr.io/...:<appVersion>). Set it only to try another build, e.g. `latest`.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Needed only if the GHCR package is private, e.g. [{ name: ghcr-pull }]. Create the secret with:
+#   kubectl -n poker create secret docker-registry ghcr-pull --docker-server=ghcr.io \
+#     --docker-username=<github user> --docker-password=<token with read:packages>
+imagePullSecrets: []
+
+auth:
+  # Request header Pangolin uses to forward the signed-in user's email. Check your Pangolin version's docs.
+  emailHeader: remote-email
+
+persistence:
+  # k3s's built-in provisioner stores the volume on the node's disk (/var/lib/rancher/k3s/storage/).
+  storageClass: local-path
+  size: 1Gi
+
+service:
+  port: 80
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
