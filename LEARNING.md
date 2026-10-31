@@ -211,3 +211,24 @@ in Go) and `requestSubmit()`, which submits a form from code while keeping `use:
   `SUM` over the ledger, deleting one entry lowers the balance by exactly that amount, and later cash-outs or sets
   stay as they were. That's what lets several mis-taps be fully undone even after a cash-out
   (see the "removes several mis-taps" test).
+
+## The night chart (`NightChart.svelte`)
+
+A hand-written SVG step chart in the player's ⋯ sheet, with no chart library. It's worth reading top to bottom.
+
+- **Data → points:** `resultSeries()` in `src/lib/history.ts` turns the history (newest first) into a running
+  result from the player's side, so up means in the green. It's plain TypeScript with unit tests in `history.test.ts`.
+  It works backwards from the current balance, so it stays correct even if old history is cut off.
+- **Points → pixels:** two small functions, `x(i)` and `y(cents)`, map data to SVG coordinates. Everything else is
+  string-building a `d` path: `M` moves, `H` draws horizontally and `V` vertically, which is what makes it a step line.
+- **Sizing:** `bind:clientWidth` measures the container, and the SVG uses `viewBox` + `w-full`. The SVG must never set
+  its own width, or it can widen its container, which then measures wider (a feedback loop that overflowed at 320px).
+- **Colour:** green above $0 and red below, using a `linearGradient` with a hard stop at the zero line plus two
+  `clipPath`s for the washes. The colours were checked with the dataviz skill's validator so red/green stays
+  distinguishable for colour-blind players. Position above or below the labelled $0 line carries the same meaning.
+- **Interaction:** pointer events pick the nearest change (drag to scrub on a phone, with `touch-pan-y` so vertical
+  scrolling still works). Arrow keys do the same, and `role="slider"` with `aria-valuetext` makes a screen reader
+  announce each point.
+- **Motion:** `pathLength="1"` normalises the path length, so animating `stroke-dashoffset` from 1 to 0 "draws" the
+  line. It's off when the phone asks for reduced motion.
+- **A real bug the tests caught:** `-0` in JavaScript can format as "-$0". `0 - balance` avoids it.

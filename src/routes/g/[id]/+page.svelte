@@ -4,6 +4,8 @@
 	import { describeBalance, formatCents, parseCents, toInputValue } from '#lib/money.ts';
 	import ActionSheet from './ActionSheet.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import NightChart from './NightChart.svelte';
+	import { KIND_LABEL, signedCents, when, type HistoryEntry } from '#lib/history.ts';
 	import type { PageProps } from './$types';
 
 	// `data` merges this page's load() with the layout's (which adds `user`).
@@ -56,12 +58,6 @@
 
 	// A player's history is fetched from the JSON endpoint in history/[playerId]/+server.ts when
 	// their sheet opens, rather than sent with every 5-second refresh.
-	type HistoryEntry = {
-		id: number;
-		kind: 'buyin' | 'cashout' | 'clear' | 'set';
-		deltaCents: number;
-		createdAt: string;
-	};
 	let history = $state<HistoryEntry[] | null>(null);
 	let historyFailed = $state(false);
 
@@ -71,25 +67,6 @@
 		const res = await fetch(`/g/${data.group.id}/history/${playerId}`);
 		if (res.ok) history = await res.json();
 		else historyFailed = true;
-	}
-
-	const KIND_LABEL = { buyin: 'Buy-in', cashout: 'Cash out', clear: 'Cleared', set: 'Set' };
-
-	function signed(cents: number) {
-		return cents < 0 ? `−${formatCents(-cents)}` : `+${formatCents(cents)}`;
-	}
-
-	/** "9:42 PM" today, "Fri 9:42 PM" this past week, "Oct 3" before that, in the viewer's time zone. */
-	function when(iso: string) {
-		const date = new Date(iso);
-		const time = { hour: 'numeric', minute: '2-digit' } as const;
-		if (date.toDateString() === new Date().toDateString())
-			return date.toLocaleTimeString(undefined, time);
-		const recent = Date.now() - date.getTime() < 6 * 24 * 60 * 60 * 1000;
-		return date.toLocaleString(
-			undefined,
-			recent ? { weekday: 'short', ...time } : { month: 'short', day: 'numeric' }
-		);
 	}
 
 	function openAmount() {
@@ -349,7 +326,10 @@
 				{ label: 'Remove player', tone: 'danger', onselect: () => open('remove', p) }
 			]}
 		>
-			<section aria-label="History" class="mb-2 max-h-64 overflow-y-auto border-y border-base-300">
+			{#if history && history.length > 0}
+				<NightChart name={p.name} entries={history} balanceCents={p.balanceCents} />
+			{/if}
+			<section aria-label="History" class="mb-2 max-h-48 overflow-y-auto border-y border-base-300">
 				{#if historyFailed}
 					<p class="py-3 text-error">Couldn't load the history. Close this and try again.</p>
 				{:else if history === null}
@@ -364,7 +344,9 @@
 									<span class="block">{KIND_LABEL[entry.kind]}</span>
 									<span class="block text-sm opacity-75">{when(entry.createdAt)}</span>
 								</span>
-								<span class="font-display text-xl tabular-nums">{signed(entry.deltaCents)}</span>
+								<span class="font-display text-xl tabular-nums"
+									>{signedCents(entry.deltaCents)}</span
+								>
 								{#if entry.kind === 'buyin'}
 									<form
 										method="POST"

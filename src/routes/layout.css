@@ -83,6 +83,22 @@
 	--font-display: 'Big Shoulders Display Variable', 'Arial Narrow', sans-serif;
 }
 
+/* Chart marks for up (green) and down (red). Checked with the dataviz skill's validator: the pair stays
+   distinguishable with red-green colour blindness (OKLab ΔE ≥ 8) because they differ in lightness too,
+   and both reach 3:1 against the sheet background. Text never uses these; it keeps the theme colours. */
+:root {
+	--chart-up: #1d5a44;
+	--chart-down: #d65a60;
+	--chart-wash: 0.12; /* area fill opacity: a light wash, never a solid block */
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--chart-up: #7fd1ad;
+		--chart-down: #c43c44;
+		--chart-wash: 0.2; /* red at 12% on felt green turns muddy grey; a bit more keeps it red */
+	}
+}
+
 /* Phone behaviour. touch-action: manipulation turns off double-tap-to-zoom (so two quick chip taps
    are two buy-ins, not a zoom) but keeps pinch zoom. The grey iOS tap flash is replaced by :active styles. */
 html {
