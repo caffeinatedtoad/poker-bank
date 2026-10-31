@@ -70,3 +70,22 @@ The browser updates without a reload. That's Vite's hot module replacement.
   Think of it as `panic` that SvelteKit recovers into an HTTP response, with no `if err != nil` chain.
 - Balances are never stored. They're `SUM(delta_cents)` over an append-only `entries` table, so "clear" and
   "set" append a correcting entry and the full history survives mistakes.
+
+## Step 4: read-only pages
+
+- A route is a folder with up to two files: `+page.server.ts` (server only: `load()` and later `actions`)
+  and `+page.svelte` (the template). `src/routes/g/[id]/` is the pattern `/g/{id}`.
+- `load()` returns a plain object, and SvelteKit hands it to the page as `data`. The `./$types` import is
+  **generated** from your `load()` return type, so `data.players[0].balanceCents` is type-checked end to end.
+  Think of it as an API contract that writes itself.
+- On the first visit the page is rendered to HTML on the server (curl shows real content). After that,
+  navigating between pages fetches only the `load()` data as JSON and re-renders in the browser.
+- Svelte template syntax: `{#each list as item (item.id)}` is `range` (the `(item.id)` is a key, like a map key,
+  so rows keep their identity when the list changes); `{#if}`/`{:else}`; `{expr}` prints escaped text;
+  `class:text-primary={cond}` toggles a class.
+- Runes, Svelte's reactivity markers: `$props()` receives inputs and `$derived(expr)` recomputes when its
+  inputs change. No manual cache invalidation.
+- `#lib` imports need the real file extension (`#lib/money.ts`). It's a literal path alias, not magic resolution.
+- Styling: Tailwind utility classes in the markup (`flex`, `gap-4`, `text-3xl`) instead of a separate CSS file.
+  The theme colors (`text-primary`, `bg-base-200`) come from the DaisyUI themes in `layout.css`, which switch
+  between light (`cardroom`) and dark (`felt`) automatically.
