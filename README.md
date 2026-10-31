@@ -30,6 +30,11 @@ cp .env.example .env
 `npm start` behaves like production. CSRF protection is on, and the server assumes `https` (true behind Pangolin),
 so forms posted over plain `http://localhost` are rejected. Use `npm run dev` for local work.
 
+## On your phone
+
+Open the app in Safari (or Chrome on Android), then **Share → Add to Home Screen**. It gets the chip icon and opens
+full screen like an app.
+
 ## Trying it as different users
 
 Locally you're `DEV_USER` from `.env`. To act as someone else, send the auth header yourself:

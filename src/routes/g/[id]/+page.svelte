@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { refreshAll } from '$app/navigation';
 	import { describeBalance, formatCents, parseCents, toInputValue } from '#lib/money.ts';
+	import ActionSheet from './ActionSheet.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import type { PageProps } from './$types';
 
@@ -19,17 +20,75 @@
 	let amount = $state(toInputValue(data.group.defaultBuyinCents));
 	let amountCents = $derived(parseCents(amount));
 	let amountValid = $derived(amountCents !== null && amountCents > 0);
+	let chipLabel = $derived(amountValid ? `+${formatCents(amountCents!)}` : '?');
 
-	// Which row's extra actions are showing, and which confirmation is open (if any).
-	let expanded = $state<number | null>(null);
-	type ConfirmKind = 'cashout' | 'clear' | 'set' | 'remove';
-	let pending = $state<{ kind: ConfirmKind; playerId: number } | null>(null);
-	let pendingPlayer = $derived(data.players.find((p) => p.id === pending?.playerId));
+	// The −/+ buttons in the bottom bar change the amount without opening the keyboard.
+	const STEP_CENTS = 500;
+	function step(direction: 1 | -1) {
+		const next =
+			(amountValid ? amountCents! : data.group.defaultBuyinCents) + direction * STEP_CENTS;
+		if (next > 0) amount = toInputValue(next);
+	}
+
+	// Which sheet or confirmation is open, if any. 'menu' is the ⋯ action sheet for a player.
+	type PlayerSheet = 'menu' | 'cashout' | 'set' | 'clear' | 'remove';
+	let pending = $state<{ kind: PlayerSheet; playerId: number } | { kind: 'amount' } | null>(null);
+	let pendingPlayerId = $derived(pending && 'playerId' in pending ? pending.playerId : null);
+	let pendingPlayer = $derived(data.players.find((p) => p.id === pendingPlayerId));
+
 	let setValue = $state('');
 	let setCents = $derived(parseCents(setValue));
 	let cashoutValue = $state('');
 	let cashoutCents = $derived(parseCents(cashoutValue));
 	let cashoutValid = $derived(cashoutCents !== null && cashoutCents > 0);
+	let amountDraft = $state('');
+	let amountDraftCents = $derived(parseCents(amountDraft));
+	let amountDraftValid = $derived(amountDraftCents !== null && amountDraftCents > 0);
+	let makeDefault = $state(false);
+	let defaultForm = $state<HTMLFormElement>();
+
+	function open(kind: PlayerSheet, player: { id: number; balanceCents: number }) {
+		setValue = toInputValue(player.balanceCents);
+		cashoutValue = '';
+		pending = { kind, playerId: player.id };
+	}
+
+	function openAmount() {
+		amountDraft = amount;
+		makeDefault = false;
+		pending = { kind: 'amount' };
+	}
+
+	function applyAmount() {
+		amount = amountDraft;
+		// requestSubmit() posts the hidden form below as if its button were pressed (use:enhance included).
+		if (makeDefault) queueMicrotask(() => defaultForm?.requestSubmit());
+	}
+
+	// One-tap buy-ins have no confirmation, so each one offers Undo for a few seconds instead.
+	let toast = $state<{ entryId: number; text: string } | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout>;
+	let busyPlayer = $state<number | null>(null);
+
+	function buyinSubmit(player: { id: number; name: string }) {
+		const cents = amountCents!;
+		return () => {
+			busyPlayer = player.id;
+			navigator.vibrate?.(10); // a light tick on Android; iPhones ignore it
+			return async ({ result, update }: { result: any; update: () => Promise<void> }) => {
+				busyPlayer = null;
+				await update();
+				if (result.type === 'success' && result.data?.entryId) {
+					clearTimeout(toastTimer);
+					toast = {
+						entryId: result.data.entryId,
+						text: `Added ${formatCents(cents)} to ${player.name}`
+					};
+					toastTimer = setTimeout(() => (toast = null), 6000);
+				}
+			};
+		};
+	}
 
 	// Poll for other people's changes: re-run load() every 5s while the tab is visible.
 	// $effect runs in the browser only; the function it returns is cleanup, like a deferred ticker.Stop().
@@ -39,95 +98,78 @@
 		}, 5000);
 		return () => clearInterval(timer);
 	});
-
-	function confirm(kind: ConfirmKind, player: { id: number; balanceCents: number }) {
-		setValue = toInputValue(player.balanceCents);
-		cashoutValue = '';
-		expanded = null;
-		pending = { kind, playerId: player.id };
-	}
 </script>
 
 <svelte:head><title>{data.group.name}, Poker Tracker</title></svelte:head>
 
-<h1 class="font-display text-5xl font-extrabold break-words">{data.group.name}</h1>
-<p class="mt-1 text-sm opacity-75">
-	{isBank ? 'You are the bank.' : `Bank: ${data.group.bankEmail}`}
-</p>
-
-<p class="mt-6 flex items-baseline justify-between gap-4 border-b-2 border-base-content pb-2">
-	<span class="text-lg">{total < 0 ? 'The bank owes' : 'Owed to the bank'}</span>
-	<span class="font-display text-5xl font-extrabold tabular-nums"
-		>{formatCents(Math.abs(total))}</span
+<!-- A snippet is a reusable piece of markup inside this file, like {{define "balance"}} in Go templates. -->
+{#snippet balance(cents: number, align: 'start' | 'end')}
+	<span
+		class="font-display font-bold tabular-nums"
+		class:text-primary={cents < 0}
+		class:block={align === 'end'}
+		class:text-right={align === 'end'}
 	>
-</p>
+		{formatCents(Math.abs(cents))}
+		{#if cents < 0}<span class="font-sans text-sm font-normal" class:block={align === 'end'}
+				>in the green</span
+			>{/if}
+	</span>
+{/snippet}
 
-{#if form?.error}
-	<p role="alert" class="mt-4 rounded-box bg-error px-4 py-3 text-error-content">{form.error}</p>
-{/if}
-
-{#if isBank && data.players.length > 0}
-	<div class="mt-4 flex flex-wrap items-end gap-3">
-		<label class="grid gap-1">
-			<span class="text-sm">Buy-in amount ($)</span>
-			<input
-				bind:value={amount}
-				inputmode="decimal"
-				aria-invalid={!amountValid}
-				class="input w-32 font-display text-xl font-bold tabular-nums"
-			/>
-		</label>
-		{#if amountValid && amountCents !== data.group.defaultBuyinCents}
-			<form method="POST" action="?/setDefault" use:enhance>
-				<input type="hidden" name="amount" value={amount} />
-				<button class="btn btn-ghost btn-sm">Make {formatCents(amountCents!)} the default</button>
-			</form>
-		{/if}
-	</div>
-{/if}
-
-{#if data.players.length === 0}
-	<p class="mt-6 text-lg">
-		{isBank ? 'No players yet. Add the first one below.' : 'No players yet.'}
+<div class={isBank ? 'pb-36' : ''}>
+	<h1 class="font-display text-3xl leading-none font-extrabold break-words sm:text-4xl">
+		{data.group.name}
+	</h1>
+	<p class="mt-2 text-sm opacity-75">
+		{isBank ? 'You are the bank.' : `Bank: ${data.group.bankEmail}`}
 	</p>
-{:else}
-	<ul class="mt-2 divide-y divide-base-300">
-		{#each data.players as player (player.id)}
-			<li class="py-3">
-				<div class="flex min-h-20 items-center gap-3">
-					<div class="min-w-0 flex-1">
-						<p class="truncate font-display text-3xl font-bold">{player.name}</p>
-						<p
-							class="font-display text-2xl font-semibold tabular-nums"
-							class:text-primary={player.balanceCents < 0}
-						>
-							{formatCents(Math.abs(player.balanceCents))}
-							{#if player.balanceCents < 0}<span class="font-sans text-sm font-normal">
-									in the green</span
-								>{/if}
-						</p>
-					</div>
 
+	<section class="mt-4 border-b-2 border-base-content pb-3">
+		<p class="text-sm">{total < 0 ? 'The bank owes' : 'Owed to the bank'}</p>
+		<p class="font-display text-5xl leading-none font-extrabold tabular-nums sm:text-6xl">
+			{formatCents(Math.abs(total))}
+		</p>
+	</section>
+
+	{#if form?.error}
+		<p role="alert" class="mt-4 rounded-box bg-error px-4 py-3 text-error-content">{form.error}</p>
+	{/if}
+
+	{#if data.players.length === 0}
+		<p class="mt-6 text-lg">
+			{isBank ? 'No players yet. Add the first one below.' : 'No players yet.'}
+		</p>
+	{:else}
+		<ul class="divide-y divide-base-300">
+			{#each data.players as player (player.id)}
+				<li class="flex min-h-24 items-center gap-2 py-3">
 					{#if isBank}
-						<form method="POST" action="?/buyin" use:enhance>
+						<div class="min-w-0 flex-1">
+							<p class="line-clamp-2 font-display text-2xl leading-tight font-bold break-words">
+								{player.name}
+							</p>
+							<p class="text-2xl">{@render balance(player.balanceCents, 'start')}</p>
+						</div>
+						<form method="POST" action="?/buyin" use:enhance={buyinSubmit(player)}>
 							<input type="hidden" name="playerId" value={player.id} />
 							<input type="hidden" name="amount" value={amount} />
 							<button
 								class="chip"
-								class:text-base={amount.length > 4}
+								data-size={chipLabel.length > 7 ? 'sm' : chipLabel.length > 5 ? 'md' : undefined}
 								disabled={!amountValid}
+								aria-busy={busyPlayer === player.id}
 								aria-label="Buy in {player.name} for {amountValid
 									? formatCents(amountCents!)
 									: 'an invalid amount'}"
 							>
-								{amountValid ? `+${formatCents(amountCents!)}` : '?'}
+								{chipLabel}
 							</button>
 						</form>
 						<button
-							class="btn btn-square btn-ghost"
-							aria-expanded={expanded === player.id}
+							class="btn btn-square size-12 btn-ghost"
 							aria-label="More for {player.name}"
-							onclick={() => (expanded = expanded === player.id ? null : player.id)}
+							onclick={() => open('menu', player)}
 						>
 							<svg viewBox="0 0 24 24" class="size-6" fill="currentColor" aria-hidden="true">
 								<circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle
@@ -137,50 +179,152 @@
 								/>
 							</svg>
 						</button>
+					{:else}
+						<p class="min-w-0 flex-1 font-display text-2xl leading-tight font-bold break-words">
+							{player.name}
+						</p>
+						<p class="text-3xl">{@render balance(player.balanceCents, 'end')}</p>
 					{/if}
-				</div>
+				</li>
+			{/each}
+		</ul>
+	{/if}
 
-				{#if isBank && expanded === player.id}
-					<div class="flex flex-wrap gap-2 pb-1">
-						<button class="btn btn-primary btn-sm" onclick={() => confirm('cashout', player)}
-							>Cash out</button
-						>
-						<button class="btn btn-sm" onclick={() => confirm('set', player)}>Set amount</button>
-						<button
-							class="btn btn-sm"
-							disabled={player.balanceCents === 0}
-							onclick={() => confirm('clear', player)}>Clear to $0</button
-						>
-						<button
-							class="btn btn-ghost text-error btn-sm"
-							onclick={() => confirm('remove', player)}>Remove player</button
-						>
-					</div>
-				{/if}
-			</li>
-		{/each}
-	</ul>
-{/if}
+	{#if isBank}
+		<form method="POST" action="?/addPlayer" use:enhance class="mt-6 flex items-end gap-2">
+			<label class="grid min-w-0 flex-1 gap-1">
+				<span class="text-sm">New player</span>
+				<input
+					name="name"
+					required
+					maxlength="40"
+					placeholder="Name"
+					autocomplete="off"
+					autocapitalize="words"
+					enterkeyhint="done"
+					class="input w-full text-base"
+				/>
+			</label>
+			<button class="btn btn-primary">Add player</button>
+		</form>
+	{/if}
+</div>
 
 {#if isBank}
-	<form method="POST" action="?/addPlayer" use:enhance class="mt-6 flex items-end gap-2">
-		<label class="grid flex-1 gap-1">
-			<span class="text-sm">New player</span>
-			<input name="name" required maxlength="40" placeholder="Name" class="input w-full" />
-		</label>
-		<button class="btn btn-primary">Add player</button>
+	<!-- Hidden form the amount dialog submits when "make this the default" is ticked. -->
+	<form method="POST" action="?/setDefault" use:enhance bind:this={defaultForm} hidden>
+		<input type="hidden" name="amount" value={amount} />
 	</form>
+
+	{#if toast}
+		<div
+			role="status"
+			class="fixed inset-x-0 z-20 mx-auto flex max-w-xl px-4"
+			style="bottom: calc(max(0.75rem, env(safe-area-inset-bottom)) + 6rem)"
+		>
+			<div
+				class="flex w-full items-center gap-3 rounded-box bg-neutral py-2 pr-2 pl-4 text-neutral-content shadow-lg"
+			>
+				<span class="min-w-0 flex-1 truncate">{toast.text}</span>
+				<form
+					method="POST"
+					action="?/undo"
+					use:enhance={() => {
+						toast = null;
+						return async ({ update }) => update();
+					}}
+				>
+					<input type="hidden" name="entryId" value={toast.entryId} />
+					<button class="btn btn-ghost text-neutral-content">Undo</button>
+				</form>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Pinned to the bottom, where a thumb rests. Tap the amount to type one; −/+ step by $5. -->
+	<div
+		class="safe-x safe-bottom fixed inset-x-0 bottom-0 z-10 border-t border-base-300 bg-base-200 pt-3"
+	>
+		<div class="mx-auto flex max-w-xl items-center gap-3">
+			<button
+				class="btn btn-circle size-14 border-base-300 bg-base-100 text-2xl"
+				aria-label="Lower the buy-in by $5"
+				disabled={!amountValid || amountCents! <= STEP_CENTS}
+				onclick={() => step(-1)}>−</button
+			>
+			<button
+				class="flex min-h-14 flex-1 flex-col items-center justify-center rounded-box active:bg-base-300"
+				onclick={openAmount}
+				aria-label="Buy-in amount {amountValid
+					? formatCents(amountCents!)
+					: 'not set'}. Tap to change."
+			>
+				<span class="text-sm">Buy-in</span>
+				<span class="font-display text-3xl leading-none font-extrabold tabular-nums">
+					{amountValid ? formatCents(amountCents!) : 'Set amount'}
+				</span>
+			</button>
+			<button
+				class="btn btn-circle size-14 border-base-300 bg-base-100 text-2xl"
+				aria-label="Raise the buy-in by $5"
+				onclick={() => step(1)}>+</button
+			>
+		</div>
+	</div>
 {/if}
 
-<!-- One dialog, mounted only while a confirmation is pending. -->
-{#if pending && pendingPlayer}
+<!-- One sheet or dialog at a time, mounted only while pending. -->
+{#if pending?.kind === 'amount'}
+	<ConfirmDialog
+		title="Buy-in amount"
+		confirmLabel={amountDraftValid ? `Use ${formatCents(amountDraftCents!)}` : 'Use amount'}
+		disabled={!amountDraftValid}
+		position="top"
+		onconfirm={applyAmount}
+		onclose={() => (pending = null)}
+	>
+		<label class="grid gap-1">
+			<span>Each chip tap adds this much ($)</span>
+			<input
+				bind:value={amountDraft}
+				inputmode="decimal"
+				enterkeyhint="go"
+				autocomplete="off"
+				class="input w-full font-display text-2xl font-bold tabular-nums"
+			/>
+		</label>
+		{#if amountDraftValid && amountDraftCents !== data.group.defaultBuyinCents}
+			<label class="flex min-h-11 items-center gap-3">
+				<input type="checkbox" bind:checked={makeDefault} class="checkbox" />
+				<span>Make {formatCents(amountDraftCents!)} the group's default</span>
+			</label>
+		{/if}
+	</ConfirmDialog>
+{:else if pending && pendingPlayer}
 	{@const p = pendingPlayer}
-	{#if pending.kind === 'cashout'}
+	{#if pending.kind === 'menu'}
+		<ActionSheet
+			title={p.name}
+			subtitle={describeBalance(p.balanceCents)}
+			onclose={() => (pending = null)}
+			options={[
+				{ label: 'Cash out', tone: 'primary', onselect: () => open('cashout', p) },
+				{ label: 'Set amount', onselect: () => open('set', p) },
+				{
+					label: 'Clear balance',
+					disabled: p.balanceCents === 0,
+					onselect: () => open('clear', p)
+				},
+				{ label: 'Remove player', tone: 'danger', onselect: () => open('remove', p) }
+			]}
+		/>
+	{:else if pending.kind === 'cashout'}
 		<ConfirmDialog
 			title="Cash out {p.name}"
 			action="?/cashout"
 			confirmLabel={cashoutValid ? `Cash out ${formatCents(cashoutCents!)}` : 'Cash out'}
 			disabled={!cashoutValid}
+			position="top"
 			onclose={() => (pending = null)}
 		>
 			<input type="hidden" name="playerId" value={p.id} />
@@ -190,16 +334,17 @@
 					name="amount"
 					bind:value={cashoutValue}
 					inputmode="decimal"
-					placeholder="15"
+					enterkeyhint="go"
+					autocomplete="off"
 					class="input w-full font-display text-2xl font-bold tabular-nums"
 				/>
 			</label>
-			<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-lg">
+			<dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1">
 				<dt>Now</dt>
-				<dd class="tabular-nums">{describeBalance(p.balanceCents)}</dd>
+				<dd class="font-display text-2xl tabular-nums">{describeBalance(p.balanceCents)}</dd>
 				<dt>After</dt>
 				<dd
-					class="font-bold tabular-nums"
+					class="font-display text-2xl font-bold tabular-nums"
 					class:text-primary={cashoutValid && p.balanceCents - cashoutCents! < 0}
 				>
 					{cashoutValid ? describeBalance(p.balanceCents - cashoutCents!) : '—'}
@@ -210,13 +355,14 @@
 		<ConfirmDialog
 			title="Clear {p.name}?"
 			action="?/clear"
-			confirmLabel="Clear to $0"
+			confirmLabel="Clear balance"
 			onclose={() => (pending = null)}
 		>
 			<input type="hidden" name="playerId" value={p.id} />
 			<p class="text-lg">
-				{p.name} goes from <strong class="tabular-nums">{formatCents(p.balanceCents)}</strong> to
-				<strong>$0</strong>. Their buy-in history is kept.
+				{p.name} goes from
+				<strong class="font-display text-xl tabular-nums">{describeBalance(p.balanceCents)}</strong>
+				to <strong class="font-display text-xl">even</strong>. Their history is kept.
 			</p>
 		</ConfirmDialog>
 	{:else if pending.kind === 'set'}
@@ -225,6 +371,7 @@
 			action="?/set"
 			confirmLabel={setCents === null ? 'Set amount' : `Set to ${formatCents(setCents)}`}
 			disabled={setCents === null || setCents === p.balanceCents}
+			position="top"
 			onclose={() => (pending = null)}
 		>
 			<input type="hidden" name="playerId" value={p.id} />
@@ -233,36 +380,39 @@
 				<input
 					name="value"
 					bind:value={setValue}
-					inputmode="decimal"
+					inputmode="text"
+					enterkeyhint="go"
+					autocomplete="off"
 					class="input w-full font-display text-2xl font-bold tabular-nums"
 				/>
 			</label>
-			<p class="text-lg">
-				{#if setCents === null}
-					Enter an amount like 40 or -12.50.
-				{:else}
-					{p.name} goes from <strong class="tabular-nums">{formatCents(p.balanceCents)}</strong> to
-					<strong class="tabular-nums">{formatCents(setCents)}</strong>.
-				{/if}
-			</p>
+			<dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1">
+				<dt>Now</dt>
+				<dd class="font-display text-2xl tabular-nums">{describeBalance(p.balanceCents)}</dd>
+				<dt>After</dt>
+				<dd class="font-display text-2xl font-bold tabular-nums">
+					{setCents === null ? 'Enter an amount like 40 or -12.50' : describeBalance(setCents)}
+				</dd>
+			</dl>
 		</ConfirmDialog>
 	{:else}
 		<ConfirmDialog
 			title="Remove {p.name}?"
 			action="?/removePlayer"
-			confirmLabel="Remove {p.name}"
+			confirmLabel="Remove"
 			danger
 			onclose={() => (pending = null)}
 		>
 			<input type="hidden" name="playerId" value={p.id} />
 			<p class="text-lg">
 				{#if p.balanceCents > 0}
-					{p.name} still owes <strong class="tabular-nums">{formatCents(p.balanceCents)}</strong>.
+					{p.name} still owes
+					<strong class="font-display text-xl tabular-nums">{formatCents(p.balanceCents)}</strong>.
 				{:else if p.balanceCents < 0}
 					The bank still owes {p.name}
-					<strong class="tabular-nums">{formatCents(-p.balanceCents)}</strong>.
+					<strong class="font-display text-xl tabular-nums">{formatCents(-p.balanceCents)}</strong>.
 				{/if}
-				Removing them deletes their buy-in history. This can't be undone.
+				Removing them deletes their history. This can't be undone.
 			</p>
 		</ConfirmDialog>
 	{/if}

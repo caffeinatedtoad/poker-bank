@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { openDb } from './db/open';
 import { entries } from './db/schema';
 import { createGroup, getGroup, listGroups, requireBank } from './groups';
-import { addPlayer, balanceOf, buyIn, cashOut, listPlayers, moveTo, removePlayer } from './ledger';
+import {
+	addPlayer,
+	balanceOf,
+	buyIn,
+	cashOut,
+	listPlayers,
+	moveTo,
+	removePlayer,
+	undoBuyIn
+} from './ledger';
 
 const BANK = 'bank@example.com';
 
@@ -48,6 +57,29 @@ describe('ledger', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		cashOut(db, groupId, alice, 1200, BANK);
 		expect(balanceOf(db, alice)).toBe(800);
+	});
+
+	it('undoes a mistaken buy-in', () => {
+		buyIn(db, groupId, alice, 2000, BANK);
+		const oops = buyIn(db, groupId, alice, 2000, BANK);
+		undoBuyIn(db, groupId, oops);
+		expect(balanceOf(db, alice)).toBe(2000);
+		expect(thrownStatus(() => undoBuyIn(db, groupId, oops))).toBe(404); // already gone
+	});
+
+	it('only undoes buy-ins, and only within the group', () => {
+		buyIn(db, groupId, alice, 2000, BANK);
+		cashOut(db, groupId, alice, 500, BANK);
+		const cashout = db
+			.select()
+			.from(entries)
+			.all()
+			.find((e) => e.kind === 'cashout')!.id;
+		expect(thrownStatus(() => undoBuyIn(db, groupId, cashout))).toBe(404);
+		const buyin = buyIn(db, groupId, alice, 100, BANK);
+		const other = createGroup(db, { name: 'Other', bankEmail: 'x@y.z', defaultBuyinCents: 500 });
+		expect(thrownStatus(() => undoBuyIn(db, other, buyin))).toBe(404);
+		expect(balanceOf(db, alice)).toBe(1600);
 	});
 
 	it('clears to zero without deleting history', () => {

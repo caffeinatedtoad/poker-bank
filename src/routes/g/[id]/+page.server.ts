@@ -8,7 +8,8 @@ import {
 	cashOut,
 	listPlayers,
 	moveTo,
-	removePlayer
+	removePlayer,
+	undoBuyIn
 } from '#lib/server/ledger.ts';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -42,7 +43,15 @@ export const actions: Actions = {
 		const amount = forms.cents(form, 'amount', { positive: true });
 		if (!playerId) return badPlayer();
 		if (!amount) return fail(400, { error: 'Enter a buy-in amount above zero, like 20.' });
-		buyIn(db, group.id, playerId, amount, locals.user);
+		// Returned data reaches the page's use:enhance callback, which offers an Undo toast.
+		return { entryId: buyIn(db, group.id, playerId, amount, locals.user) };
+	},
+
+	undo: async ({ params, locals, request }) => {
+		const group = bankGroup(params, locals.user);
+		const entryId = forms.id(await request.formData(), 'entryId');
+		if (!entryId) return fail(400, { error: 'Nothing to undo.' });
+		undoBuyIn(db, group.id, entryId);
 	},
 
 	cashout: async ({ params, locals, request }) => {

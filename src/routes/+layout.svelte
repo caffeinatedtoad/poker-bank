@@ -10,10 +10,15 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="mx-auto min-h-dvh max-w-xl px-4 pt-4 pb-12">
-	<header class="mb-6 flex items-center justify-between gap-4">
-		<a href="/" class="font-display text-xl font-bold text-primary">Poker Tracker</a>
-		<span class="truncate text-sm opacity-75">{data.user}</span>
+<!-- safe-x / safe-top (layout.css) keep content clear of the notch and rounded corners. -->
+<div class="safe-x safe-top mx-auto min-h-dvh max-w-xl pb-12">
+	<header class="mb-3 flex min-h-11 items-center justify-between gap-4">
+		<a
+			href="/"
+			class="-mx-2 flex min-h-11 items-center px-2 font-display text-xl font-bold text-primary"
+			>Poker Tracker</a
+		>
+		<span class="min-w-0 truncate text-sm opacity-75">{data.user}</span>
 	</header>
 	<main>
 		{@render children()}

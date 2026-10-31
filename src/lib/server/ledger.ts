@@ -26,10 +26,36 @@ export function removePlayer(db: DB, groupId: number, playerId: number): void {
 	db.delete(players).where(eq(players.id, playerId)).run(); // cascades to the player's entries
 }
 
-/** Adds `cents` to the player's debt. */
-export function buyIn(db: DB, groupId: number, playerId: number, cents: number, by: string): void {
+/** Adds `cents` to the player's debt. Returns the new entry's id so the bank can undo a mis-tap. */
+export function buyIn(
+	db: DB,
+	groupId: number,
+	playerId: number,
+	cents: number,
+	by: string
+): number {
 	requirePlayer(db, groupId, playerId);
-	db.insert(entries).values({ playerId, deltaCents: cents, kind: 'buyin', byEmail: by }).run();
+	return db
+		.insert(entries)
+		.values({ playerId, deltaCents: cents, kind: 'buyin', byEmail: by })
+		.returning({ id: entries.id })
+		.get().id;
+}
+
+/**
+ * Deletes a buy-in that was tapped by mistake. Deleting (rather than appending a reversal) is
+ * deliberate: the undo is offered for a few seconds, so the buy-in should read as never having happened.
+ * Only buy-ins belonging to this group can be undone.
+ */
+export function undoBuyIn(db: DB, groupId: number, entryId: number): void {
+	const found = db
+		.select({ id: entries.id })
+		.from(entries)
+		.innerJoin(players, eq(players.id, entries.playerId))
+		.where(and(eq(entries.id, entryId), eq(entries.kind, 'buyin'), eq(players.groupId, groupId)))
+		.get();
+	if (!found) error(404, 'That buy-in is already gone');
+	db.delete(entries).where(eq(entries.id, entryId)).run();
 }
 
 /**

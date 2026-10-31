@@ -175,3 +175,26 @@ A good example of a change that cuts through every layer:
 - **Handler:** the `cashout` action in `g/[id]/+page.server.ts` follows the same four steps as every other action.
 - **UI:** a "Cash out" button opens `ConfirmDialog` with a Now / After preview built from `describeBalance()`
   in `money.ts`, which is shared so every screen words balances the same way.
+
+## Mobile-first pass
+
+Phone browsers have quirks that desktop testing never shows. The ones this app handles, and where:
+
+- **iOS zooms into any input under 16px** when it's focused. Small inputs use `text-base` (16px).
+- **Tap targets are at least 44–48px** (Apple's HIG says 44pt, Material says 48dp). DaisyUI's `--size-field: 0.3rem`
+  in `layout.css` makes every `btn` and `input` 48px tall.
+- **Double-tap zoom** would turn two quick chip taps into a zoom. `touch-action: manipulation` on `html` disables it
+  but keeps pinch zoom.
+- **The iOS keyboard doesn't resize the page**, so anything pinned to the bottom can hide behind it. Dialogs with a
+  text field use `position="top"` (`ConfirmDialog.svelte`). Bottom sheets only hold buttons.
+- **iOS's `decimal` keypad has no minus key.** The Set dialog uses the full keyboard so negative amounts work.
+- **Notch and home indicator:** `viewport-fit=cover` in `app.html` plus the `safe-x`, `safe-top` and
+  `safe-bottom` classes, which pad with `env(safe-area-inset-*)`.
+- **Thumb zone:** the bottom third of the screen is easiest to reach. The buy-in bar and action sheets live there.
+- **Undo instead of confirm** for the frequent, reversible action (a chip tap). Confirmation dialogs are kept for
+  rare or destructive actions. That follows Baymard's research on accidental taps.
+- **Add to Home Screen:** `static/manifest.webmanifest` plus `apple-touch-icon.png` make it open full screen
+  with the chip icon. iOS 26 colours its toolbars from the `body` background, so `app.html` sets one explicitly.
+
+Svelte features introduced here: `{#snippet}` / `{@render}` (a reusable template block, like `{{define}}`/`{{template}}`
+in Go) and `requestSubmit()`, which submits a form from code while keeping `use:enhance`.

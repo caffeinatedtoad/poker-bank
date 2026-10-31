@@ -2,11 +2,20 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- viewport-fit=cover lets the page use the full screen; layout.css pads content with env(safe-area-inset-*) -->
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
+		<!-- Android colours its browser bars with theme-color. iOS 26 ignores it and uses the body background. -->
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9eeeb" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e261d" />
+		<!-- "Add to Home Screen": opens full screen like an app, with this name and icon. -->
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<meta name="apple-mobile-web-app-title" content="Poker" />
+		<meta name="mobile-web-app-capable" content="yes" />
 		%sveltekit.head%
 	</head>
-	<body data-sveltekit-preload-data="hover">
+	<body data-sveltekit-preload-data="hover" class="bg-base-100 text-base-content">
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

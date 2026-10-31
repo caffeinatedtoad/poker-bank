@@ -9,7 +9,7 @@
 
 <svelte:head><title>Poker Tracker</title></svelte:head>
 
-<h1 class="font-display text-5xl font-extrabold">Groups</h1>
+<h1 class="font-display text-5xl leading-none font-extrabold">Groups</h1>
 
 {#if data.groups.length === 0}
 	<p class="mt-4 text-lg">No groups yet. Create one below and you'll be its bank.</p>
@@ -19,17 +19,23 @@
 			<li>
 				<a
 					href="/g/{group.id}"
-					class="flex items-baseline gap-4 py-4 hover:bg-base-200 focus-visible:bg-base-200"
+					class="flex min-h-20 items-center gap-4 py-4 hover:bg-base-200 focus-visible:bg-base-200 active:bg-base-200"
 				>
 					<span class="min-w-0 flex-1">
-						<span class="block truncate font-display text-3xl font-bold">{group.name}</span>
-						<span class="block truncate text-sm opacity-75">
-							Bank: {group.bankEmail}, {group.playerCount}
+						<span class="line-clamp-2 font-display text-3xl leading-tight font-bold break-words">
+							{group.name}
+						</span>
+						<span class="mt-1 block truncate text-sm opacity-75">
+							{group.bankEmail === data.user ? "You're the bank" : `Bank: ${group.bankEmail}`},
+							{group.playerCount}
 							{group.playerCount === 1 ? 'player' : 'players'}
 						</span>
 					</span>
-					<span class="font-display text-3xl font-bold tabular-nums">
-						{formatCents(group.totalCents)}
+					<span class="text-right font-display text-3xl font-bold tabular-nums">
+						{formatCents(Math.abs(group.totalCents))}
+						{#if group.totalCents < 0}<span class="block font-sans text-sm font-normal"
+								>bank owes</span
+							>{/if}
 					</span>
 				</a>
 			</li>
@@ -45,7 +51,16 @@
 	</p>
 	<label class="grid gap-1">
 		<span>Name</span>
-		<input name="name" required maxlength="40" placeholder="Friday poker" class="input w-full" />
+		<input
+			name="name"
+			required
+			maxlength="40"
+			placeholder="Friday poker"
+			autocomplete="off"
+			autocapitalize="words"
+			enterkeyhint="next"
+			class="input w-full text-base"
+		/>
 	</label>
 	<label class="grid gap-1">
 		<span>Buy-in amount ($)</span>
@@ -53,8 +68,10 @@
 			name="defaultBuyin"
 			required
 			inputmode="decimal"
+			enterkeyhint="go"
+			autocomplete="off"
 			value="20"
-			class="input w-full tabular-nums"
+			class="input w-full font-display text-xl font-bold tabular-nums"
 		/>
 	</label>
 	{#if form?.error}<p role="alert" class="text-error">{form.error}</p>{/if}

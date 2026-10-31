@@ -32,11 +32,11 @@
 	--color-warning-content: #ffffff;
 	--color-error: #a3242c;
 	--color-error-content: #ffffff;
-	--radius-selector: 1rem;
+	--radius-selector: 0.375rem;
 	--radius-field: 0.375rem;
 	--radius-box: 0.5rem;
 	--size-selector: 0.25rem;
-	--size-field: 0.25rem;
+	--size-field: 0.3rem; /* 0.3rem × 10 = 48px buttons and inputs: a comfortable thumb target */
 	--border: 1px;
 	--depth: 0;
 	--noise: 0;
@@ -67,11 +67,11 @@
 	--color-warning-content: #0e261d;
 	--color-error: #f07178;
 	--color-error-content: #0e261d;
-	--radius-selector: 1rem;
+	--radius-selector: 0.375rem;
 	--radius-field: 0.375rem;
 	--radius-box: 0.5rem;
 	--size-selector: 0.25rem;
-	--size-field: 0.25rem;
+	--size-field: 0.3rem; /* 0.3rem × 10 = 48px buttons and inputs: a comfortable thumb target */
 	--border: 1px;
 	--depth: 0;
 	--noise: 0;
@@ -81,6 +81,32 @@
 @theme {
 	--font-sans: 'Atkinson Hyperlegible Next Variable', system-ui, sans-serif;
 	--font-display: 'Big Shoulders Display Variable', 'Arial Narrow', sans-serif;
+}
+
+/* Phone behaviour. touch-action: manipulation turns off double-tap-to-zoom (so two quick chip taps
+   are two buy-ins, not a zoom) but keeps pinch zoom. The grey iOS tap flash is replaced by :active styles. */
+html {
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+	-webkit-text-size-adjust: 100%;
+}
+
+/* Keep content clear of the notch, rounded corners and home indicator (needs viewport-fit=cover). */
+.safe-x {
+	padding-left: max(1rem, env(safe-area-inset-left));
+	padding-right: max(1rem, env(safe-area-inset-right));
+}
+.safe-top {
+	padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+.safe-bottom {
+	padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+.modal-bottom .modal-box {
+	padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+.modal-top .modal-box {
+	padding-top: max(1.5rem, env(safe-area-inset-top));
 }
 
 /* The buy-in button, drawn as a poker chip: 8 white edge spots, a red face, a dashed inner ring. */
@@ -102,7 +128,26 @@
 		repeating-conic-gradient(var(--color-secondary) 0 30deg, #fafbf9 30deg 45deg);
 	box-shadow: 0 0 0 2px var(--color-secondary);
 	cursor: pointer;
-	transition: transform 80ms ease-out;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none; /* no copy/lookup menu on long press */
+	transition:
+		transform 80ms ease-out,
+		opacity 80ms;
+}
+/* Longer labels ("+$12.50") shrink to stay inside the dashed ring. Set from the page via data-size. */
+.chip[data-size='md'] {
+	font-size: 1rem;
+}
+.chip[data-size='sm'] {
+	font-size: 0.8rem;
+}
+.chip:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.chip[aria-busy='true'] {
+	opacity: 0.6;
 }
 .chip::before {
 	content: '';
