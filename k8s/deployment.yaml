@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: poker-tracker
+spec:
+  # SQLite on a ReadWriteOnce volume: exactly one pod, and stop the old one before starting the new one.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: poker-tracker
+  template:
+    metadata:
+      labels:
+        app: poker-tracker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # the `node` user in the image
+        fsGroup: 1000 # makes the mounted volume writable by that user
+      containers:
+        - name: poker-tracker
+          image: ghcr.io/harrisonwaffel/poker-tracker:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            # Header Pangolin forwards with the signed-in user's email. Verify for your Pangolin version.
+            - name: AUTH_EMAIL_HEADER
+              value: remote-email
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # TCP, not HTTP: every HTTP request without Pangolin's header gets a 401.
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+          livenessProbe:
+            tcpSocket:
+              port: 3000
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: poker-tracker-data

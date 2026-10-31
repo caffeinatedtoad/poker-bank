@@ -1,0 +1,12 @@
+# Disk for the SQLite file. k3s's built-in local-path provisioner stores it on the Pi's filesystem
+# (under /var/lib/rancher/k3s/storage/). Back up by copying poker.db out of the pod or that folder.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: poker-tracker-data
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

@@ -135,3 +135,16 @@ The browser updates without a reload. That's Vite's hot module replacement.
   when the page goes away, like `defer ticker.Stop()`. Effects never run during server rendering.
 - Polling skips hidden tabs (`document.hidden`), so phones in pockets don't keep hitting the server.
 - Local `$state` (the typed buy-in amount) survives refreshes, because only `data` is replaced.
+
+## Step 9: container and Kubernetes
+
+- `Dockerfile` is a two-stage build, as you'd do for Go: stage one has npm and all devDependencies and runs
+  `vite build`. Stage two copies only `build/` (the bundled server), the SQL migrations, and `node_modules`
+  pruned down to better-sqlite3. adapter-node bundles every devDependency into `build/`, so only packages
+  in `dependencies` (native code that can't be bundled) are needed at runtime.
+- `node build` is the production entrypoint: a plain Node HTTP server, like running your compiled binary.
+- better-sqlite3 v13 ships prebuilt native binaries (`prebuilds/linux-arm64.node`), so the arm64 image builds
+  under emulation without a C++ toolchain. `npm ci --ignore-scripts` stops npm trying to compile it anyway.
+- Kubernetes: `replicas: 1` plus `strategy: Recreate`, because SQLite is a file on a single-node volume.
+  Two pods writing it would be like two processes sharing a BoltDB file. Probes use TCP because every HTTP
+  request without Pangolin's header is a 401.
