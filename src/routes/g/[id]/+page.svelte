@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { refreshAll } from '$app/navigation';
 	import { formatCents, parseCents, toInputValue } from '#lib/money.ts';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import type { PageProps } from './$types';
@@ -25,6 +26,15 @@
 	let pendingPlayer = $derived(data.players.find((p) => p.id === pending?.playerId));
 	let setValue = $state('');
 	let setCents = $derived(parseCents(setValue));
+
+	// Poll for other people's changes: re-run load() every 5s while the tab is visible.
+	// $effect runs in the browser only; the function it returns is cleanup, like a deferred ticker.Stop().
+	$effect(() => {
+		const timer = setInterval(() => {
+			if (!document.hidden) refreshAll();
+		}, 5000);
+		return () => clearInterval(timer);
+	});
 
 	function confirm(kind: 'clear' | 'set' | 'remove', player: { id: number; balanceCents: number }) {
 		setValue = toInputValue(player.balanceCents);

@@ -125,3 +125,13 @@ The browser updates without a reload. That's Vite's hot module replacement.
   from it, so the chip label, the hidden input and the "make default" button all update as you type.
 - **Native `<dialog>`:** `showModal()` gives focus trapping, Esc-to-close and a backdrop for free. The page mounts
   the dialog only while a confirmation is pending (`{#if pending}`) and clears `pending` in `onclose`.
+
+## Step 8: live updates by polling
+
+- The group page calls `refreshAll()` from `$app/navigation` every 5 seconds. That re-runs `load()` on the server
+  and swaps in the new `data`, and Svelte re-renders only what changed. It's a GET on a ticker, the simplest
+  "live" that works. There's no websocket server to run on the Pi.
+- `$effect(() => { ...; return cleanup })` runs in the browser after the page mounts. The returned function runs
+  when the page goes away, like `defer ticker.Stop()`. Effects never run during server rendering.
+- Polling skips hidden tabs (`document.hidden`), so phones in pockets don't keep hitting the server.
+- Local `$state` (the typed buy-in amount) survives refreshes, because only `data` is replaced.
