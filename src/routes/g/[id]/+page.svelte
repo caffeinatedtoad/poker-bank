@@ -36,7 +36,9 @@
 	// 'chart' is the bigger, interactive chart a tap on a row's background chart opens.
 	type PlayerSheet = 'buyin' | 'menu' | 'chart' | 'cashout' | 'set' | 'clear' | 'remove';
 	let pending = $state<
-		{ kind: PlayerSheet; playerId: number } | { kind: 'amount' | 'rename' | 'deleteGroup' } | null
+		| { kind: PlayerSheet; playerId: number }
+		| { kind: 'amount' | 'groupMenu' | 'rename' | 'deleteGroup' }
+		| null
 	>(null);
 	let pendingPlayerId = $derived(pending && 'playerId' in pending ? pending.playerId : null);
 	let pendingPlayer = $derived(data.players.find((p) => p.id === pendingPlayerId));
@@ -117,9 +119,29 @@
 {/snippet}
 
 <div class={isBank ? 'pb-36' : ''}>
-	<h1 class="font-display text-3xl leading-none font-extrabold break-words sm:text-4xl">
-		{data.group.name}
-	</h1>
+	<div class="flex items-start gap-2">
+		<h1
+			class="min-w-0 flex-1 font-display text-3xl leading-none font-extrabold break-words sm:text-4xl"
+		>
+			{data.group.name}
+		</h1>
+		{#if isBank}
+			<!-- Group settings live behind this menu, away from the player rows and buy-in bar where thumbs are busy. -->
+			<button
+				class="btn -mt-2 btn-square size-12 btn-ghost"
+				aria-label="More for {data.group.name}"
+				onclick={() => (pending = { kind: 'groupMenu' })}
+			>
+				<svg viewBox="0 0 24 24" class="size-6" fill="currentColor" aria-hidden="true">
+					<circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle
+						cx="19"
+						cy="12"
+						r="2"
+					/>
+				</svg>
+			</button>
+		{/if}
+	</div>
 	<p class="mt-2 text-sm opacity-75">
 		{isBank ? 'You are the bank.' : `Bank: ${data.group.bankEmail}`}
 	</p>
@@ -192,18 +214,28 @@
 						>
 							{chipLabel}
 						</button>
+						<!-- Labelled, not a bare icon: this sheet holds cash out, set, clear, remove and history,
+						     which no single glyph says as plainly as the chip says "buy in". -->
 						<button
-							class="btn btn-square size-12 btn-ghost"
-							aria-label="More for {player.name}"
+							class="btn h-12 min-w-12 flex-col gap-0 btn-ghost px-2"
+							aria-label="Settle {player.name}: cash out, set amount, history"
 							onclick={() => open('menu', player)}
 						>
-							<svg viewBox="0 0 24 24" class="size-6" fill="currentColor" aria-hidden="true">
-								<circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle
-									cx="19"
-									cy="12"
-									r="2"
+							<svg
+								viewBox="0 0 24 24"
+								class="size-5"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								aria-hidden="true"
+							>
+								<path
+									d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l2.5 2.5L16 9.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
 								/>
 							</svg>
+							<span class="text-xs font-normal">Settle</span>
 						</button>
 					{:else}
 						<p
@@ -238,13 +270,6 @@
 			</label>
 			<button class="btn btn-primary">Add player</button>
 		</form>
-		<button class="btn mt-10 w-full btn-outline" onclick={() => (pending = { kind: 'rename' })}
-			>Rename group</button
-		>
-		<button
-			class="btn mt-3 w-full btn-outline btn-error"
-			onclick={() => (pending = { kind: 'deleteGroup' })}>Delete group</button
-		>
 	{/if}
 </div>
 
@@ -340,6 +365,16 @@
 			</label>
 		{/if}
 	</ConfirmDialog>
+{:else if pending?.kind === 'groupMenu'}
+	<ActionSheet
+		title={data.group.name}
+		subtitle="Group settings"
+		onclose={() => (pending = null)}
+		options={[
+			{ label: 'Rename group', onselect: () => (pending = { kind: 'rename' }) },
+			{ label: 'Delete group', tone: 'danger', onselect: () => (pending = { kind: 'deleteGroup' }) }
+		]}
+	/>
 {:else if pending?.kind === 'rename'}
 	<ConfirmDialog
 		title="Rename {data.group.name}"
