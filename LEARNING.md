@@ -203,10 +203,11 @@ in Go) and `requestSubmit()`, which submits a form from code while keeping `use:
 
 ### Player history and removing buy-ins
 
-- The ⋯ sheet fetches `GET /g/{id}/history/{playerId}`, a JSON endpoint in
-  `src/routes/g/[id]/history/[playerId]/+server.ts`. A `+server.ts` exports functions named after HTTP methods,
-  like registering an `http.HandlerFunc`, and `json(...)` is `json.NewEncoder(w).Encode(...)`. Fetching on demand
-  keeps the history out of the 5-second refresh.
+- Every player's history (newest 100 changes each) comes with the page's `load()`, from `listGroupEntries()` in
+  `ledger.ts`: one query for the whole group, grouped by player in TypeScript. It rides along with the 5-second
+  refresh because every row draws its chart from it, and the ⋯ sheet reads the same data, so it never shows a
+  loading state and stays current while open. (It used to be fetched from a `+server.ts` JSON endpoint when the
+  sheet opened; that went once the rows needed every player's history up front.)
 - `removeBuyIn()` in `ledger.ts` deletes **any** buy-in in the group, however old. Because the balance is a
   `SUM` over the ledger, deleting one entry lowers the balance by exactly that amount, and later cash-outs or sets
   stay as they were. That's what lets several mis-taps be fully undone even after a cash-out
@@ -214,7 +215,8 @@ in Go) and `requestSubmit()`, which submits a form from code while keeping `use:
 
 ## The night chart (`NightChart.svelte`)
 
-A hand-written SVG step chart in the player's ⋯ sheet, with no chart library. It's worth reading top to bottom.
+A hand-written SVG step chart, with no chart library. It's worth reading top to bottom. It appears twice: as an
+interactive chart in the player's ⋯ sheet, and with `background` set as a backdrop behind each player row.
 
 - **Data → points:** `resultSeries()` in `src/lib/history.ts` turns the history (newest first) into a running
   result from the player's side, so up means in the green. It's plain TypeScript with unit tests in `history.test.ts`.
@@ -231,6 +233,14 @@ A hand-written SVG step chart in the player's ⋯ sheet, with no chart library. 
   announce each point.
 - **Motion:** `pathLength="1"` normalises the path length, so animating `stroke-dashoffset` from 1 to 0 "draws" the
   line. It's off when the phone asks for reduced motion.
+- **Behind a row (`background`):** no readout and no dragging. The chart sits inside a button, so tapping it opens
+  the full interactive chart in a sheet. The name and balance on top are `pointer-events-none`, so taps on them reach
+  the button behind. The row is a CSS grid and the chart shares only the first cell with the name, so it ends where the chip
+  (or balance) begins and the newest change is never hidden. The y-axis labels move to a right-hand column, like a
+  trading app's price axis, because the left is under the name. The name and balance get a `.halo` (a `text-shadow`
+  in the page colour, as map labels use) so the line passes behind letters rather than through them. The chart's
+  box is `absolute inset-0` inside a wrapper that has no size of its own, so measuring its height can't feed back
+  into the row's height.
 - **A real bug the tests caught:** `-0` in JavaScript can format as "-$0". `0 - balance` avoids it.
 
 ## Helm chart (`charts/poker-tracker`)

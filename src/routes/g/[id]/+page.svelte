@@ -5,7 +5,7 @@
 	import ActionSheet from './ActionSheet.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import NightChart from './NightChart.svelte';
-	import { KIND_LABEL, signedCents, when, type HistoryEntry } from '#lib/history.ts';
+	import { KIND_LABEL, signedCents, when } from '#lib/history.ts';
 	import type { PageProps } from './$types';
 
 	// `data` merges this page's load() with the layout's (which adds `user`).
@@ -33,7 +33,8 @@
 	}
 
 	// Which sheet or confirmation is open, if any. 'menu' is the ⋯ sheet (history and actions) for a player.
-	type PlayerSheet = 'buyin' | 'menu' | 'cashout' | 'set' | 'clear' | 'remove';
+	// 'chart' is the bigger, interactive chart a tap on a row's background chart opens.
+	type PlayerSheet = 'buyin' | 'menu' | 'chart' | 'cashout' | 'set' | 'clear' | 'remove';
 	let pending = $state<
 		{ kind: PlayerSheet; playerId: number } | { kind: 'amount' | 'deleteGroup' } | null
 	>(null);
@@ -55,20 +56,6 @@
 		setValue = toInputValue(player.balanceCents);
 		cashoutValue = '';
 		pending = { kind, playerId: player.id };
-		if (kind === 'menu') loadHistory(player.id);
-	}
-
-	// A player's history is fetched from the JSON endpoint in history/[playerId]/+server.ts when
-	// their sheet opens, rather than sent with every 5-second refresh.
-	let history = $state<HistoryEntry[] | null>(null);
-	let historyFailed = $state(false);
-
-	async function loadHistory(playerId: number) {
-		history = null;
-		historyFailed = false;
-		const res = await fetch(`/g/${data.group.id}/history/${playerId}`);
-		if (res.ok) history = await res.json();
-		else historyFailed = true;
 	}
 
 	function openAmount() {
@@ -155,9 +142,40 @@
 	{:else}
 		<ul class="divide-y divide-base-300">
 			{#each data.players as player (player.id)}
-				<li class="flex min-h-24 items-center gap-2 py-3">
+				{@const history = data.history[player.id]}
+				<!-- A grid so their chart can share the first cell with the name: it then ends where the chip
+				     (or the balance) begins, and never hides the newest change. isolate keeps the -z-10
+				     chart behind this row's text without dropping under the page. -->
+				<li
+					class="isolate grid min-h-24 items-center gap-2 py-3 {isBank
+						? 'grid-cols-[minmax(0,1fr)_auto_auto]'
+						: 'grid-cols-[minmax(0,1fr)_auto]'}"
+				>
+					{#if history}
+						<!-- Their night as a backdrop, reaching into the row's padding (-my-3) so it uses the row's
+						     full height. It's also a button: tapping it (or the name on top, which lets taps
+						     through) opens the chart large enough to drag across. -->
+						<button
+							class="relative -z-10 col-start-1 row-start-1 -my-3 cursor-pointer self-stretch outline-none focus-visible:outline-2 focus-visible:outline-base-content active:bg-base-200"
+							aria-label="Show {player.name}'s chart"
+							onclick={() => open('chart', player)}
+						>
+							<NightChart
+								background
+								name={player.name}
+								entries={history}
+								balanceCents={player.balanceCents}
+							/>
+						</button>
+					{/if}
 					{#if isBank}
-						<div class="min-w-0 flex-1">
+						<!-- pr-12 keeps the name clear of the chart's axis labels, which sit at the cell's right. -->
+						<div
+							class="col-start-1 row-start-1 min-w-0"
+							class:pr-12={history}
+							class:halo={history}
+							class:pointer-events-none={history}
+						>
 							<p class="line-clamp-2 font-display text-2xl leading-tight font-bold break-words">
 								{player.name}
 							</p>
@@ -188,7 +206,12 @@
 							</svg>
 						</button>
 					{:else}
-						<p class="min-w-0 flex-1 font-display text-2xl leading-tight font-bold break-words">
+						<p
+							class="col-start-1 row-start-1 min-w-0 font-display text-2xl leading-tight font-bold break-words"
+							class:pr-12={history}
+							class:halo={history}
+							class:pointer-events-none={history}
+						>
 							{player.name}
 						</p>
 						<p class="text-3xl">{@render balance(player.balanceCents, 'end')}</p>
@@ -329,7 +352,18 @@
 	</ConfirmDialog>
 {:else if pending && pendingPlayer}
 	{@const p = pendingPlayer}
-	{#if pending.kind === 'menu'}
+	{@const history = data.history[p.id] ?? []}
+	{#if pending.kind === 'chart'}
+		<ActionSheet
+			title={p.name}
+			subtitle={describeBalance(p.balanceCents)}
+			options={[]}
+			closeLabel="Close"
+			onclose={() => (pending = null)}
+		>
+			<NightChart name={p.name} entries={history} balanceCents={p.balanceCents} height={240} />
+		</ActionSheet>
+	{:else if pending.kind === 'menu'}
 		<ActionSheet
 			title={p.name}
 			subtitle={describeBalance(p.balanceCents)}
@@ -345,15 +379,11 @@
 				{ label: 'Remove player', tone: 'danger', onselect: () => open('remove', p) }
 			]}
 		>
-			{#if history && history.length > 0}
+			{#if history.length > 0}
 				<NightChart name={p.name} entries={history} balanceCents={p.balanceCents} />
 			{/if}
 			<section aria-label="History" class="mb-2 max-h-48 overflow-y-auto border-y border-base-300">
-				{#if historyFailed}
-					<p class="py-3 text-error">Couldn't load the history. Close this and try again.</p>
-				{:else if history === null}
-					<p class="py-3 opacity-75">Loading history…</p>
-				{:else if history.length === 0}
+				{#if history.length === 0}
 					<p class="py-3 opacity-75">No buy-ins yet.</p>
 				{:else}
 					<ul class="divide-y divide-base-300">
@@ -374,10 +404,7 @@
 											const text = `Removed ${formatCents(entry.deltaCents)} buy-in from ${p.name}`;
 											return async ({ result, update }) => {
 												await update();
-												if (result.type === 'success') {
-													showToast(text);
-													loadHistory(p.id);
-												}
+												if (result.type === 'success') showToast(text);
 											};
 										}}
 									>

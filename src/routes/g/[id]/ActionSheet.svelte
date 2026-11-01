@@ -14,10 +14,12 @@
 		subtitle: string;
 		options: Option[];
 		onclose: () => void;
+		/** The dismiss button's label: "Close" suits a sheet with nothing to cancel. */
+		closeLabel?: string;
 		/** Optional content between the heading and the actions (the player's history). */
 		children?: Snippet;
 	}
-	let { title, subtitle, options, onclose, children }: Props = $props();
+	let { title, subtitle, options, onclose, closeLabel = 'Cancel', children }: Props = $props();
 
 	let dialog: HTMLDialogElement;
 	$effect(() => dialog.showModal());
@@ -39,7 +41,8 @@
 				onclick={option.onselect}>{option.label}</button
 			>
 		{/each}
-		<button class="btn h-14 btn-ghost text-base" onclick={() => dialog.close()}>Cancel</button>
+		<button class="btn h-14 btn-ghost text-base" onclick={() => dialog.close()}>{closeLabel}</button
+		>
 	</div>
 	<form method="dialog" class="modal-backdrop"><button>Close</button></form>
 </dialog>

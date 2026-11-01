@@ -11,6 +11,7 @@ import {
 	addPlayer,
 	buyIn,
 	cashOut,
+	listGroupEntries,
 	listPlayers,
 	moveTo,
 	removeBuyIn,
@@ -20,7 +21,9 @@ import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ params }) => {
 	const group = getGroupFromParam(db, params.id);
-	return { group, players: listPlayers(db, group.id) };
+	// Every player's history comes along with each 5-second refresh: it draws the chart behind each
+	// row and fills the ⋯ sheet, so both stay current without a separate fetch.
+	return { group, players: listPlayers(db, group.id), history: listGroupEntries(db, group.id) };
 };
 
 /** Loads the group and throws 403 unless the signed-in user is its bank. First line of every action. */

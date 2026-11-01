@@ -2,12 +2,12 @@ import { formatCents } from '#lib/money.ts';
 
 // Helpers for a player's history, shared by the history list and the chart. Browser-safe (no server code).
 
-/** One ledger entry as the history endpoint (`g/[id]/history/[playerId]`) returns it. */
+/** One ledger entry as the group page's load() returns it (see `listGroupEntries` in ledger.ts). */
 export type HistoryEntry = {
 	id: number;
 	kind: 'buyin' | 'cashout' | 'clear' | 'set';
 	deltaCents: number;
-	createdAt: string;
+	createdAt: Date;
 };
 
 export const KIND_LABEL = { buyin: 'Buy-in', cashout: 'Cash out', clear: 'Cleared', set: 'Set' };
@@ -18,8 +18,7 @@ export function signedCents(cents: number): string {
 }
 
 /** "9:42 PM" today, "Fri 9:42 PM" this past week, "Oct 3" before that, in the viewer's time zone. */
-export function when(iso: string): string {
-	const date = new Date(iso);
+export function when(date: Date): string {
 	const time = { hour: 'numeric', minute: '2-digit' } as const;
 	if (date.toDateString() === new Date().toDateString()) {
 		return date.toLocaleTimeString(undefined, time);

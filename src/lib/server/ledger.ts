@@ -17,24 +17,30 @@ export function listPlayers(db: DB, groupId: number) {
 		.all();
 }
 
-// shortcut: shows the newest 100 changes only; add paging if a player's history ever outgrows that.
+// shortcut: keeps the newest 100 changes per player; add paging if a player's history ever outgrows that.
 const HISTORY_LIMIT = 100;
 
-/** A player's ledger entries, newest first: every buy-in, cash-out, set and clear. */
-export function listEntries(db: DB, groupId: number, playerId: number) {
-	requirePlayer(db, groupId, playerId);
-	return db
+/** Every player's ledger entries in a group, newest first, keyed by player id. Players with none are absent. */
+export function listGroupEntries(db: DB, groupId: number) {
+	const rows = db
 		.select({
+			playerId: entries.playerId,
 			id: entries.id,
 			kind: entries.kind,
 			deltaCents: entries.deltaCents,
 			createdAt: entries.createdAt
 		})
 		.from(entries)
-		.where(eq(entries.playerId, playerId))
+		.innerJoin(players, eq(entries.playerId, players.id))
+		.where(eq(players.groupId, groupId))
 		.orderBy(desc(entries.id))
-		.limit(HISTORY_LIMIT)
 		.all();
+	const byPlayer: Record<number, Omit<(typeof rows)[number], 'playerId'>[]> = {};
+	for (const { playerId, ...entry } of rows) {
+		const list = (byPlayer[playerId] ??= []);
+		if (list.length < HISTORY_LIMIT) list.push(entry);
+	}
+	return byPlayer;
 }
 
 export function addPlayer(db: DB, groupId: number, name: string): number {

@@ -18,7 +18,7 @@ import {
 	listPlayers,
 	moveTo,
 	removePlayer,
-	listEntries,
+	listGroupEntries,
 	removeBuyIn
 } from './ledger';
 
@@ -84,13 +84,13 @@ describe('ledger', () => {
 		removeBuyIn(db, groupId, oops1);
 		removeBuyIn(db, groupId, oops2);
 		expect(balanceOf(db, alice)).toBe(-1000); // $10 in the green, as if the mis-taps never happened
-		expect(listEntries(db, groupId, alice).map((e) => e.id)).toContain(real);
+		expect(listGroupEntries(db, groupId)[alice].map((e) => e.id)).toContain(real);
 	});
 
 	it('only removes buy-ins, and only within the group', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		cashOut(db, groupId, alice, 500, BANK);
-		const cashout = listEntries(db, groupId, alice).find((e) => e.kind === 'cashout')!.id;
+		const cashout = listGroupEntries(db, groupId)[alice].find((e) => e.kind === 'cashout')!.id;
 		expect(thrownStatus(() => removeBuyIn(db, groupId, cashout))).toBe(404);
 		const buyin = buyIn(db, groupId, alice, 100, BANK);
 		const other = createGroup(db, { name: 'Other', bankEmail: 'x@y.z', defaultBuyinCents: 500 });
@@ -102,13 +102,14 @@ describe('ledger', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		cashOut(db, groupId, alice, 500, BANK);
 		moveTo(db, groupId, alice, 0, 'clear', BANK);
-		expect(listEntries(db, groupId, alice).map((e) => [e.kind, e.deltaCents])).toEqual([
+		expect(listGroupEntries(db, groupId)[alice].map((e) => [e.kind, e.deltaCents])).toEqual([
 			['clear', -1500],
 			['cashout', -500],
 			['buyin', 2000]
 		]);
 		const other = createGroup(db, { name: 'Other', bankEmail: 'x@y.z', defaultBuyinCents: 500 });
-		expect(thrownStatus(() => listEntries(db, other, alice))).toBe(404);
+		buyIn(db, other, addPlayer(db, other, 'Bob'), 500, BANK);
+		expect(Object.keys(listGroupEntries(db, groupId))).toEqual([String(alice)]);
 	});
 
 	it('clears to zero without deleting history', () => {

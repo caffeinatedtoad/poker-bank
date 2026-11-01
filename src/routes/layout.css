@@ -118,6 +118,14 @@ html {
 .safe-bottom {
 	padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
+/* A glow in the page colour around text drawn over a chart, like street names on a map: lines
+   pass behind the letters without running through them. */
+.halo {
+	text-shadow:
+		0 0 2px var(--color-base-100),
+		0 0 4px var(--color-base-100),
+		0 0 8px var(--color-base-100);
+}
 .modal-bottom .modal-box {
 	padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
