@@ -57,6 +57,10 @@ export function setDefaultBuyin(db: DB, groupId: number, cents: number): void {
 	db.update(groups).set({ defaultBuyinCents: cents }).where(eq(groups.id, groupId)).run();
 }
 
+export function renameGroup(db: DB, groupId: number, name: string): void {
+	db.update(groups).set({ name }).where(eq(groups.id, groupId)).run();
+}
+
 /** Hides the group from everyone. Players and history are kept so restoreGroup can bring it all back. */
 export function deleteGroup(db: DB, groupId: number): void {
 	db.update(groups).set({ deletedAt: new Date() }).where(eq(groups.id, groupId)).run();

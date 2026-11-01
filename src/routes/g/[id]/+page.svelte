@@ -36,7 +36,7 @@
 	// 'chart' is the bigger, interactive chart a tap on a row's background chart opens.
 	type PlayerSheet = 'buyin' | 'menu' | 'chart' | 'cashout' | 'set' | 'clear' | 'remove';
 	let pending = $state<
-		{ kind: PlayerSheet; playerId: number } | { kind: 'amount' | 'deleteGroup' } | null
+		{ kind: PlayerSheet; playerId: number } | { kind: 'amount' | 'rename' | 'deleteGroup' } | null
 	>(null);
 	let pendingPlayerId = $derived(pending && 'playerId' in pending ? pending.playerId : null);
 	let pendingPlayer = $derived(data.players.find((p) => p.id === pendingPlayerId));
@@ -238,8 +238,11 @@
 			</label>
 			<button class="btn btn-primary">Add player</button>
 		</form>
+		<button class="btn mt-10 w-full btn-outline" onclick={() => (pending = { kind: 'rename' })}
+			>Rename group</button
+		>
 		<button
-			class="btn mt-10 w-full btn-outline btn-error"
+			class="btn mt-3 w-full btn-outline btn-error"
 			onclick={() => (pending = { kind: 'deleteGroup' })}>Delete group</button
 		>
 	{/if}
@@ -336,6 +339,28 @@
 				<span>Make {formatCents(amountDraftCents!)} the group's default</span>
 			</label>
 		{/if}
+	</ConfirmDialog>
+{:else if pending?.kind === 'rename'}
+	<ConfirmDialog
+		title="Rename {data.group.name}"
+		action="?/rename"
+		confirmLabel="Rename"
+		position="top"
+		onclose={() => (pending = null)}
+	>
+		<label class="grid gap-1">
+			<span>Group name</span>
+			<input
+				name="name"
+				value={data.group.name}
+				required
+				maxlength="40"
+				autocomplete="off"
+				autocapitalize="words"
+				enterkeyhint="go"
+				class="input w-full text-base"
+			/>
+		</label>
 	</ConfirmDialog>
 {:else if pending?.kind === 'deleteGroup'}
 	<ConfirmDialog

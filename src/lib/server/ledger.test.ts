@@ -7,6 +7,7 @@ import {
 	getGroup,
 	listDeletedGroups,
 	listGroups,
+	renameGroup,
 	requireBank,
 	restoreGroup
 } from './groups';
@@ -206,6 +207,13 @@ describe('groups', () => {
 		expect(getGroup(db, groupId).name).toBe('Friday');
 		expect(listDeletedGroups(db, BANK)).toEqual([]);
 		expect(balanceOf(db, alice)).toBe(2000);
+	});
+
+	it('renames only the given group', () => {
+		const other = createGroup(db, { name: 'Other', bankEmail: BANK, defaultBuyinCents: 500 });
+		renameGroup(db, groupId, 'Saturday');
+		expect(getGroup(db, groupId).name).toBe('Saturday');
+		expect(getGroup(db, other).name).toBe('Other');
 	});
 
 	it('only lets the bank see and restore its deleted groups', () => {

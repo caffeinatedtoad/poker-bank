@@ -4,6 +4,7 @@ import * as forms from '#lib/server/forms.ts';
 import {
 	deleteGroup,
 	getGroupFromParam,
+	renameGroup,
 	requireBank,
 	setDefaultBuyin
 } from '#lib/server/groups.ts';
@@ -103,6 +104,13 @@ export const actions: Actions = {
 		const amount = forms.cents(await request.formData(), 'amount', { positive: true });
 		if (!amount) return fail(400, { error: 'Enter a buy-in amount above zero, like 20.' });
 		setDefaultBuyin(db, group.id, amount);
+	},
+
+	rename: async ({ params, locals, request }) => {
+		const group = bankGroup(params, locals.user);
+		const name = forms.name(await request.formData());
+		if (!name) return fail(400, { error: `Name the group (up to ${forms.MAX_NAME} characters).` });
+		renameGroup(db, group.id, name);
 	},
 
 	deleteGroup: ({ params, locals }) => {
