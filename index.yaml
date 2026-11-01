@@ -2,6 +2,18 @@ apiVersion: v1
 entries:
   poker-tracker:
   - apiVersion: v2
+    appVersion: 0.3.0
+    created: "2026-11-01T01:42:13.457584342Z"
+    description: Tracks what each player owes the bank on poker night. SQLite on a
+      single pod, behind Pangolin SSO.
+    digest: da272f97eea3cf6fafb5aa24b3670ea07cbf01e36f141ecd16075c3f8a1581ec
+    home: https://github.com/caffeinatedtoad/poker-bank
+    name: poker-tracker
+    type: application
+    urls:
+    - https://github.com/caffeinatedtoad/poker-bank/releases/download/poker-tracker-0.3.0/poker-tracker-0.3.0.tgz
+    version: 0.3.0
+  - apiVersion: v2
     appVersion: 0.2.0
     created: "2026-10-31T18:01:14.062826585Z"
     description: Tracks what each player owes the bank on poker night. SQLite on a
@@ -25,4 +37,4 @@ entries:
     urls:
     - https://github.com/caffeinatedtoad/poker-bank/releases/download/poker-tracker-0.1.0/poker-tracker-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-31T18:01:14.062831912Z"
+generated: "2026-11-01T01:42:13.4575995Z"
