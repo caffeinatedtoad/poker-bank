@@ -187,11 +187,66 @@ html {
 	outline: 3px solid var(--color-base-content);
 	outline-offset: 3px;
 }
+
+/* The settle button beside the chip, drawn as a folded banknote: felt green, an inner border, $ at each end. */
+.bill {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 4.25rem;
+	height: 2.75rem; /* 44px, still a fair thumb target */
+	flex: none;
+	padding-inline: 0.9rem;
+	border-radius: 0.2rem;
+	color: var(--color-primary-content);
+	background: var(--color-primary);
+	box-shadow:
+		inset 0 0 0 3px var(--color-primary),
+		inset 0 0 0 4px var(--color-primary-content);
+	font-family: var(--font-display);
+	font-weight: 800;
+	font-size: 0.85rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	transform: rotate(-4deg);
+	cursor: pointer;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+	transition: transform 80ms ease-out;
+}
+.bill::before,
+.bill::after {
+	content: '$';
+	position: absolute;
+	top: 50%;
+	translate: 0 -50%;
+	font-size: 0.7rem;
+	opacity: 0.8;
+}
+.bill::before {
+	left: 0.4rem;
+}
+.bill::after {
+	right: 0.4rem;
+}
+.bill:active {
+	transform: rotate(-4deg) scale(0.92);
+}
+.bill:focus-visible {
+	outline: 3px solid var(--color-base-content);
+	outline-offset: 3px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-	.chip {
+	.chip,
+	.bill {
 		transition: none;
 	}
 	.chip:active {
 		transform: none;
+	}
+	.bill:active {
+		transform: rotate(-4deg);
 	}
 }

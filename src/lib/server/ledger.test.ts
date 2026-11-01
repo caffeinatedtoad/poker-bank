@@ -20,7 +20,7 @@ import {
 	moveTo,
 	removePlayer,
 	listGroupEntries,
-	removeBuyIn
+	removeEntry
 } from './ledger';
 
 const BANK = 'bank@example.com';
@@ -72,9 +72,9 @@ describe('ledger', () => {
 	it('removes a mistaken buy-in', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		const oops = buyIn(db, groupId, alice, 2000, BANK);
-		removeBuyIn(db, groupId, oops);
+		removeEntry(db, groupId, oops);
 		expect(balanceOf(db, alice)).toBe(2000);
-		expect(thrownStatus(() => removeBuyIn(db, groupId, oops))).toBe(404); // already gone
+		expect(thrownStatus(() => removeEntry(db, groupId, oops))).toBe(404); // already gone
 	});
 
 	it('removes several mis-taps in any order, even after a cash-out', () => {
@@ -82,20 +82,28 @@ describe('ledger', () => {
 		const oops1 = buyIn(db, groupId, alice, 2000, BANK);
 		const oops2 = buyIn(db, groupId, alice, 2000, BANK);
 		cashOut(db, groupId, alice, 3000, BANK); // ended with $30 after a real $20 buy-in
-		removeBuyIn(db, groupId, oops1);
-		removeBuyIn(db, groupId, oops2);
+		removeEntry(db, groupId, oops1);
+		removeEntry(db, groupId, oops2);
 		expect(balanceOf(db, alice)).toBe(-1000); // $10 in the green, as if the mis-taps never happened
 		expect(listGroupEntries(db, groupId)[alice].map((e) => e.id)).toContain(real);
 	});
 
-	it('only removes buy-ins, and only within the group', () => {
+	it('removes a mistaken cash-out', () => {
 		buyIn(db, groupId, alice, 2000, BANK);
 		cashOut(db, groupId, alice, 500, BANK);
 		const cashout = listGroupEntries(db, groupId)[alice].find((e) => e.kind === 'cashout')!.id;
-		expect(thrownStatus(() => removeBuyIn(db, groupId, cashout))).toBe(404);
+		removeEntry(db, groupId, cashout);
+		expect(balanceOf(db, alice)).toBe(2000);
+	});
+
+	it('only removes buy-ins and cash-outs, and only within the group', () => {
+		buyIn(db, groupId, alice, 2000, BANK);
+		moveTo(db, groupId, alice, 1500, 'set', BANK);
+		const set = listGroupEntries(db, groupId)[alice].find((e) => e.kind === 'set')!.id;
+		expect(thrownStatus(() => removeEntry(db, groupId, set))).toBe(404);
 		const buyin = buyIn(db, groupId, alice, 100, BANK);
 		const other = createGroup(db, { name: 'Other', bankEmail: 'x@y.z', defaultBuyinCents: 500 });
-		expect(thrownStatus(() => removeBuyIn(db, other, buyin))).toBe(404);
+		expect(thrownStatus(() => removeEntry(db, other, buyin))).toBe(404);
 		expect(balanceOf(db, alice)).toBe(1600);
 	});
 

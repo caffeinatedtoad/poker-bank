@@ -15,7 +15,7 @@ import {
 	listGroupEntries,
 	listPlayers,
 	moveTo,
-	removeBuyIn,
+	removeEntry,
 	removePlayer
 } from '#lib/server/ledger.ts';
 import type { Actions, PageServerLoad } from './$types';
@@ -49,12 +49,12 @@ export const actions: Actions = {
 		return { entryId: buyIn(db, group.id, playerId, amount, locals.user) };
 	},
 
-	removeBuyIn: async ({ params, locals, request }) => {
+	removeEntry: async ({ params, locals, request }) => {
 		const group = bankGroup(params, locals.user);
 		const entryId = forms.id(await request.formData(), 'entryId');
 		if (!entryId)
-			return fail(400, { error: 'That buy-in is missing from the form. Reload and try again.' });
-		removeBuyIn(db, group.id, entryId);
+			return fail(400, { error: 'That entry is missing from the form. Reload and try again.' });
+		removeEntry(db, group.id, entryId);
 	},
 
 	cashout: async ({ params, locals, request }) => {

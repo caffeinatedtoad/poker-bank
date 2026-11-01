@@ -5,7 +5,7 @@
 	import ActionSheet from './ActionSheet.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import NightChart from './NightChart.svelte';
-	import { KIND_LABEL, signedCents, when } from '#lib/history.ts';
+	import { KIND_LABEL, signedCents, when, type HistoryEntry } from '#lib/history.ts';
 	import type { PageProps } from './$types';
 
 	// `data` merges this page's load() with the layout's (which adds `user`).
@@ -37,6 +37,7 @@
 	type PlayerSheet = 'buyin' | 'menu' | 'chart' | 'cashout' | 'set' | 'clear' | 'remove';
 	let pending = $state<
 		| { kind: PlayerSheet; playerId: number }
+		| { kind: 'removeEntry'; playerId: number; entry: HistoryEntry }
 		| { kind: 'amount' | 'groupMenu' | 'rename' | 'deleteGroup' }
 		| null
 	>(null);
@@ -214,28 +215,14 @@
 						>
 							{chipLabel}
 						</button>
-						<!-- Labelled, not a bare icon: this sheet holds cash out, set, clear, remove and history,
-						     which no single glyph says as plainly as the chip says "buy in". -->
+						<!-- Chips go in, cash comes out: a banknote opens the sheet with cash out, set, clear,
+						     remove and history. -->
 						<button
-							class="btn h-12 min-w-12 flex-col gap-0 btn-ghost px-2"
+							class="bill"
 							aria-label="Settle {player.name}: cash out, set amount, history"
 							onclick={() => open('menu', player)}
 						>
-							<svg
-								viewBox="0 0 24 24"
-								class="size-5"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								aria-hidden="true"
-							>
-								<path
-									d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12.5l2.5 2.5L16 9.5"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								/>
-							</svg>
-							<span class="text-xs font-normal">Settle</span>
+							Settle
 						</button>
 					{:else}
 						<p
@@ -292,7 +279,7 @@
 				{#if toast.undoEntryId}
 					<form
 						method="POST"
-						action="?/removeBuyIn"
+						action="?/removeEntry"
 						use:enhance={() => {
 							toast = null;
 							return async ({ update }) => update();
@@ -456,41 +443,29 @@
 								<span class="font-display text-xl tabular-nums"
 									>{signedCents(entry.deltaCents)}</span
 								>
-								{#if entry.kind === 'buyin'}
-									<form
-										method="POST"
-										action="?/removeBuyIn"
-										use:enhance={() => {
-											const text = `Removed ${formatCents(entry.deltaCents)} buy-in from ${p.name}`;
-											return async ({ result, update }) => {
-												await update();
-												if (result.type === 'success') showToast(text);
-											};
-										}}
+								{#if entry.kind === 'buyin' || entry.kind === 'cashout'}
+									<button
+										class="btn btn-square size-11 btn-ghost text-error"
+										aria-label="Remove the {formatCents(Math.abs(entry.deltaCents))} {KIND_LABEL[
+											entry.kind
+										].toLowerCase()} from {when(entry.createdAt)}"
+										onclick={() => (pending = { kind: 'removeEntry', playerId: p.id, entry })}
 									>
-										<input type="hidden" name="entryId" value={entry.id} />
-										<button
-											class="btn btn-square size-11 btn-ghost text-error"
-											aria-label="Remove the {formatCents(entry.deltaCents)} buy-in from {when(
-												entry.createdAt
-											)}"
+										<svg
+											viewBox="0 0 24 24"
+											class="size-5"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											aria-hidden="true"
 										>
-											<svg
-												viewBox="0 0 24 24"
-												class="size-5"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												aria-hidden="true"
-											>
-												<path
-													d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												/>
-											</svg>
-										</button>
-									</form>
+											<path
+												d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+											/>
+										</svg>
+									</button>
 								{:else}
 									<span class="size-11 shrink-0" aria-hidden="true"></span>
 								{/if}
@@ -500,6 +475,31 @@
 				{/if}
 			</section>
 		</ActionSheet>
+	{:else if pending.kind === 'removeEntry'}
+		{@const entry = pending.entry}
+		{@const what = `${formatCents(Math.abs(entry.deltaCents))} ${KIND_LABEL[entry.kind].toLowerCase()}`}
+		<!-- Closing (confirmed or not) goes back to the player's sheet, so several mis-taps can be removed in a row. -->
+		<ConfirmDialog
+			title="Remove this {KIND_LABEL[entry.kind].toLowerCase()}?"
+			action="?/removeEntry"
+			confirmLabel="Remove {KIND_LABEL[entry.kind].toLowerCase()}"
+			danger
+			onsuccess={() => showToast(`Removed ${what} from ${p.name}`)}
+			onclose={() => open('menu', p)}
+		>
+			<input type="hidden" name="entryId" value={entry.id} />
+			<p class="text-lg">
+				{p.name}'s {what} from {when(entry.createdAt)}.
+			</p>
+			<dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1">
+				<dt>Now</dt>
+				<dd class="font-display text-2xl tabular-nums">{describeBalance(p.balanceCents)}</dd>
+				<dt>After</dt>
+				<dd class="font-display text-2xl font-bold tabular-nums">
+					{describeBalance(p.balanceCents - entry.deltaCents)}
+				</dd>
+			</dl>
+		</ConfirmDialog>
 	{:else if pending.kind === 'buyin'}
 		<ConfirmDialog
 			title="Buy in {p.name}?"

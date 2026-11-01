@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { DB } from './db/open';
 import { entries, players } from './db/schema';
 
@@ -69,18 +69,25 @@ export function buyIn(
 }
 
 /**
- * Deletes a buy-in that was added by mistake, however long ago, so it reads as never having happened
- * (rather than appending a reversal). Later entries are untouched, so the balance drops by exactly
- * that buy-in. Only buy-ins can be removed, and only from this group.
+ * Deletes a buy-in or cash-out that was entered by mistake, however long ago, so it reads as never
+ * having happened (rather than appending a reversal). Later entries are untouched, so the balance moves
+ * by exactly that entry. Clears and sets aren't removable: they were worked out from the balance at the
+ * time, so take them back with another set. Only from this group.
  */
-export function removeBuyIn(db: DB, groupId: number, entryId: number): void {
+export function removeEntry(db: DB, groupId: number, entryId: number): void {
 	const found = db
 		.select({ id: entries.id })
 		.from(entries)
 		.innerJoin(players, eq(players.id, entries.playerId))
-		.where(and(eq(entries.id, entryId), eq(entries.kind, 'buyin'), eq(players.groupId, groupId)))
+		.where(
+			and(
+				eq(entries.id, entryId),
+				inArray(entries.kind, ['buyin', 'cashout']),
+				eq(players.groupId, groupId)
+			)
+		)
 		.get();
-	if (!found) error(404, 'That buy-in is already gone');
+	if (!found) error(404, 'That entry is already gone');
 	db.delete(entries).where(eq(entries.id, entryId)).run();
 }
 
